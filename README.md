@@ -4,7 +4,7 @@
 
 *A fighter-jet HUD style, real-time dashboard for local LLMs running in [Ollama](https://ollama.com) (Chinese UI). [English summary below](#english).*
 
-**[▶ 在线演示 Live demo](https://felixjiashengfu.github.io/ollama-hud/)** · 觉得有用就点右上角 ⭐ Star 收藏一下
+**[▶ 在线演示 Live demo](https://felixjiashengfu.github.io/ollama-hud/)** · [🤗 Hugging Face Space](https://huggingface.co/spaces/felixfufu723/ollama-hud) · 觉得有用就点右上角 ⭐ Star 收藏一下
 
 ![Ollama HUD 截图](docs/screenshot.png)
 
@@ -78,7 +78,7 @@ git clone https://github.com/FelixJiashengFu/ollama-hud.git
 - **Run it:** install Deno and Ollama, clone this repo, double-click `Start-Cockpit.cmd`, open <http://127.0.0.1:8765/>.
 - **Phone:** same Wi-Fi, click 「手机」 in the top bar and scan the QR code (an access key protects the LAN endpoint).
 - **No dependencies:** one Deno script, one PowerShell sampler, one HTML file.
-- **Demo:** <https://felixjiashengfu.github.io/ollama-hud/> replays real recorded telemetry.
+- **Demo:** <https://felixjiashengfu.github.io/ollama-hud/> (also on [Hugging Face Spaces](https://huggingface.co/spaces/felixfufu723/ollama-hud)) replays real recorded telemetry.
 
 The UI is in Chinese. Requirements: Windows 10/11, Ollama (llama.cpp runner), Deno 2.x, an NVIDIA GPU for the GPU panel.
 
