@@ -1,0 +1,1648 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ollama 座舱</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1l7 7-7 7-7-7z' fill='%235dffa8'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #020705;
+  --line: rgba(93, 255, 168, 0.14);
+  --line-strong: rgba(93, 255, 168, 0.34);
+  --hud: #5dffa8;
+  --hud-dim: #2f9a68;
+  --glow: rgba(93, 255, 168, 0.55);
+  --cyan: #59e3ff;
+  --amber: #ffb627;
+  --red: #ff4d4d;
+  --magenta: #ff7ad9;
+  --text: #c9f7df;
+  --muted: #6fa58b;
+  --faint: #3f6e58;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, "Microsoft YaHei UI", monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: radial-gradient(ellipse at 50% 20%, #08201a 0%, var(--bg) 62%) fixed, var(--bg);
+  color: var(--text);
+  font: 13px/1.35 var(--mono);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  height: 100vh;
+  overflow: hidden;
+}
+button, select, input, textarea { font: inherit; color: inherit; }
+
+/* ---------- top bar ---------- */
+.top { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+.box { border: 1px solid var(--line); border-radius: 6px; background: rgba(6, 18, 14, 0.85); padding: 6px 10px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .logo { color: var(--hud); font-size: 22px; text-shadow: 0 0 10px var(--glow); }
+.brand b { display: block; color: var(--hud); letter-spacing: 0.16em; text-shadow: 0 0 8px var(--glow); }
+.brand small, .callsign small, .pwr small { color: var(--muted); font-size: 11px; }
+.callsign { min-width: 210px; display: flex; flex-direction: column; justify-content: center; }
+.callsign b { color: var(--text); font-size: 15px; }
+.callsign span { color: var(--muted); font-size: 11px; }
+.ann { flex: 1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; min-width: 460px; }
+.light {
+  border: 1px solid rgba(93, 255, 168, 0.1); border-radius: 3px; padding: 2px 4px; text-align: center;
+  color: #2b4a3c; background: #040b08; font-size: 11.5px; line-height: 1.2; cursor: default; overflow: hidden;
+}
+.light small { display: block; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 12px; }
+.light.info { color: var(--cyan); border-color: rgba(89, 227, 255, 0.45); background: rgba(89, 227, 255, 0.08); text-shadow: 0 0 6px rgba(89, 227, 255, 0.6); }
+.light.l1 { color: var(--amber); border-color: rgba(255, 182, 39, 0.6); background: rgba(255, 182, 39, 0.12); text-shadow: 0 0 6px rgba(255, 182, 39, 0.7); }
+.light.l2 { color: var(--red); border-color: rgba(255, 77, 77, 0.7); background: rgba(255, 77, 77, 0.14); text-shadow: 0 0 6px rgba(255, 77, 77, 0.8); }
+.masters { display: flex; gap: 6px; padding: 6px; }
+.master {
+  width: 64px; border-radius: 4px; border: 1px solid #222; background: #0b0d0c; color: #333;
+  display: flex; flex-direction: column; justify-content: center; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; cursor: pointer;
+}
+.master.on.caution { background: #3a2600; color: var(--amber); border-color: var(--amber); box-shadow: 0 0 14px rgba(255, 182, 39, 0.5); }
+.master.on.warn { background: #3a0606; color: var(--red); border-color: var(--red); box-shadow: 0 0 14px rgba(255, 77, 77, 0.55); }
+.master.on.flash { animation: flash 0.55s steps(2, start) infinite; }
+@keyframes flash { 50% { filter: brightness(0.35); } }
+.pwr { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; min-width: 140px; }
+.pwr b { font-size: 20px; color: var(--magenta); text-shadow: 0 0 8px rgba(255, 122, 217, 0.6); font-variant-numeric: tabular-nums; }
+.pwr span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.phone { display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; color: var(--hud); min-width: 64px; }
+.phone b { font-size: 14px; text-shadow: 0 0 8px var(--glow); }
+.phone small { color: var(--muted); font-size: 11px; }
+.phone:hover { border-color: var(--line-strong); box-shadow: 0 0 10px rgba(93, 255, 168, 0.25); }
+.phone[hidden] { display: none; }
+.modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgba(0, 0, 0, 0.72); padding: 16px; }
+.modal[hidden] { display: none; }
+.modal-card { width: min(440px, 100%); border: 1px solid var(--line-strong); border-radius: 8px; padding: 12px 14px; background: #06120e; box-shadow: 0 0 40px rgba(93, 255, 168, 0.12); }
+.modal-card p { margin: 6px 0; line-height: 1.6; }
+.modal-card .url { color: var(--hud); font-size: 16px; text-align: center; word-break: break-all; }
+.modal-card .m { color: var(--muted); font-size: 12px; }
+#qr { width: fit-content; margin: 8px auto; padding: 10px; background: #fff; border-radius: 4px; }
+.gh { display: flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none; }
+.gh svg { width: 24px; height: 24px; fill: var(--text); flex: none; }
+.gh b { display: block; font-size: 14px; }
+.gh small { display: block; color: var(--amber); font-size: 11.5px; white-space: nowrap; }
+.gh i { font-style: normal; }
+.gh:hover { border-color: var(--amber); box-shadow: 0 0 12px rgba(255, 182, 39, 0.35); }
+.gh:hover svg { fill: var(--amber); }
+.demo-note a { color: var(--hud); }
+.clock { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; min-width: 150px; }
+.clock b { font-size: 20px; color: var(--hud); letter-spacing: 0.08em; text-shadow: 0 0 8px var(--glow); font-variant-numeric: tabular-nums; }
+.clock span { font-size: 11px; color: var(--muted); }
+.clock span.bad { color: var(--red); }
+
+/* ---------- panels ---------- */
+.deck { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 1.7fr) minmax(300px, 1fr); gap: 8px; min-height: 0; }
+.lower { display: grid; grid-template-columns: 1fr 1.05fr 0.95fr 1.2fr 1.5fr; gap: 8px; min-height: 0; }
+.mfd {
+  position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: linear-gradient(180deg, rgba(9, 24, 19, 0.94), rgba(4, 12, 9, 0.94));
+  box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.55);
+}
+.mfd::before {
+  content: ""; position: absolute; inset: -1px; pointer-events: none;
+  --c: var(--hud-dim);
+  background:
+    linear-gradient(var(--c), var(--c)) top left / 14px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) top left / 2px 14px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 14px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 2px 14px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 14px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 2px 14px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 14px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 2px 14px no-repeat;
+}
+.mfd-h {
+  display: flex; align-items: baseline; gap: 8px; flex: none;
+  color: var(--hud); font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--line); padding-bottom: 5px; margin-bottom: 6px; text-shadow: 0 0 6px var(--glow);
+}
+.mfd-h > span:first-child { white-space: nowrap; }
+.mfd-h i { margin-left: auto; font-style: normal; font-weight: 400; letter-spacing: 0; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.osb { margin-left: auto; display: flex; gap: 4px; }
+.osb button, .btn {
+  background: rgba(93, 255, 168, 0.04); border: 1px solid var(--line-strong); border-radius: 3px;
+  color: var(--hud); padding: 2px 8px; cursor: pointer; font-size: 12px;
+}
+.osb button.on, .btn:hover:not(:disabled) { background: rgba(93, 255, 168, 0.16); box-shadow: 0 0 8px rgba(93, 255, 168, 0.3); }
+.btn:disabled { opacity: 0.35; cursor: default; }
+canvas { display: block; width: 100%; }
+canvas.dials { height: 132px; flex: none; }
+canvas.cores { height: 44px; flex: none; margin: 2px 0 6px; }
+canvas.layers { height: 46px; flex: none; margin: 2px 0 4px; }
+.rows { overflow: auto; min-height: 0; flex: 1; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 10px; padding: 2px 0 3px; border-bottom: 1px dashed rgba(93, 255, 168, 0.07); }
+.row .k { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.row .v { text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.row .bar { grid-column: 1 / -1; height: 3px; margin-top: 2px; background: rgba(93, 255, 168, 0.08); display: flex; }
+.row .bar i { display: block; height: 100%; background: var(--hud); box-shadow: 0 0 6px var(--glow); }
+.row .bar i.c { background: var(--amber); box-shadow: 0 0 6px rgba(255, 182, 39, 0.6); }
+.row.l1 .v { color: var(--amber); } .row.l1 .bar i { background: var(--amber); box-shadow: 0 0 6px rgba(255, 182, 39, 0.6); }
+.row.l2 .v { color: var(--red); } .row.l2 .bar i { background: var(--red); box-shadow: 0 0 6px rgba(255, 77, 77, 0.6); }
+.row.sub .k { padding-left: 12px; }
+.row.head .k { color: var(--hud); }
+.row .v .g { color: var(--hud); } .row .v .c { color: var(--amber); } .row .v .m { color: var(--muted); }
+.sec { color: var(--hud-dim); font-size: 11px; margin: 6px 0 2px; letter-spacing: 0.1em; }
+
+/* ---------- HUD ---------- */
+.hud-box {
+  position: relative; min-height: 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 8px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(16, 60, 40, 0.35), rgba(0, 0, 0, 0) 70%), #010403;
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.9), 0 0 24px rgba(93, 255, 168, 0.05);
+}
+.hud-box canvas { position: absolute; inset: 0; height: 100%; }
+.hud-box::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.035), transparent 40%);
+}
+
+/* ---------- model info ---------- */
+.pl-name { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.pl-name b { font-size: 16px; color: var(--hud); text-shadow: 0 0 8px var(--glow); }
+.pl-name span { color: var(--muted); font-size: 11px; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-bottom: 6px; }
+.tile { border: 1px solid var(--line); border-radius: 3px; padding: 3px 6px; background: rgba(93, 255, 168, 0.03); min-width: 0; }
+.tile small { display: block; color: var(--muted); font-size: 11px; }
+.tile b { display: block; color: var(--hud); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile span { display: block; color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 2px; }
+.chip { border: 1px solid var(--line-strong); border-radius: 10px; padding: 0 7px; font-size: 11px; color: var(--text); white-space: nowrap; }
+.chip.cap { color: var(--cyan); border-color: rgba(89, 227, 255, 0.4); }
+.empty { color: var(--muted); padding: 18px 4px; text-align: center; }
+.note { color: var(--muted); font-size: 11px; line-height: 1.45; margin-top: 6px; border-left: 2px solid var(--amber); padding-left: 6px; }
+
+/* ---------- radar ---------- */
+#radar { flex: 1; min-height: 0; height: 100%; }
+
+/* ---------- test flight ---------- */
+.tf { display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: 1; }
+.tf-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tf-row label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.tf select, .tf input[type=number], .tf textarea {
+  background: #030a07; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--text); padding: 2px 5px;
+}
+.tf select:focus, .tf input:focus, .tf textarea:focus { outline: 1px solid var(--hud); }
+.tf textarea { width: 100%; resize: none; height: 50px; flex: none; }
+.tf input[type=number] { width: 62px; }
+.tf input[type=checkbox] { accent-color: var(--hud); }
+#tf-model { max-width: 170px; }
+.btn.go { font-size: 13px; font-weight: 700; padding: 4px 14px; border-color: var(--hud); color: #001a0d; background: var(--hud); box-shadow: 0 0 12px var(--glow); }
+.btn.go:hover:not(:disabled) { background: #8dffc4; }
+.btn.abort { border-color: rgba(255, 77, 77, 0.6); color: var(--red); }
+#tf-status { margin-left: auto; color: var(--muted); font-size: 12px; text-align: right; }
+#tf-out {
+  flex: 1; min-height: 36px; overflow: auto; background: #010503; border: 1px solid var(--line); border-radius: 3px;
+  padding: 4px 6px; white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--text);
+  scrollbar-width: thin; scrollbar-color: var(--faint) transparent;
+}
+#tf-out .think { color: var(--faint); }
+#tf-out .err { color: var(--red); }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; flex: none; }
+.stat { border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px; background: rgba(93, 255, 168, 0.03); min-width: 0; }
+.stat small { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat b { color: var(--hud); font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- log ---------- */
+.log-wrap { overflow: auto; flex: 1; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+th { position: sticky; top: 0; background: #06120e; color: var(--muted); font-weight: 400; text-align: right; padding: 2px 2px; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+td { text-align: right; padding: 2px 2px; border-bottom: 1px dashed rgba(93, 255, 168, 0.07); white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+td.src-test { color: var(--hud); } td.src-runner { color: var(--cyan); }
+td.hi { color: var(--hud); }
+td.bad { color: var(--red); } td.warn { color: var(--amber); } td.ok { color: var(--hud-dim); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1500px) {
+  .ann { min-width: 0; flex-basis: 100%; order: 5; }
+}
+@media (max-width: 1700px), (max-height: 860px) {
+  body { height: auto; overflow: auto; grid-template-rows: auto 620px auto; }
+  .lower { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: 440px; }
+  .lower > :nth-child(-n+3) { grid-column: span 2; }
+  .lower > :nth-child(n+4) { grid-column: span 3; }
+}
+@media (max-width: 1360px) {
+  body { grid-template-rows: auto auto auto; }
+  .deck { grid-template-columns: 1fr 1fr; }
+  .hud-box { grid-column: 1 / -1; order: -1; height: 58vh; min-height: 380px; }
+  .deck .mfd { min-height: 460px; }
+  .lower { grid-template-columns: 1fr 1fr; grid-auto-rows: 420px; }
+  .lower > * { grid-column: auto !important; }
+  .lower > :nth-child(5) { grid-column: 1 / -1 !important; }
+  .ann { min-width: 0; flex-basis: 100%; order: 5; }
+}
+@media (max-width: 760px) {
+  body { padding: 6px; }
+  .deck, .lower { grid-template-columns: 1fr; }
+  .lower > :nth-child(5) { grid-column: auto !important; }
+  .hud-box { height: 95vw; min-height: 340px; }
+  .ann { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .callsign, .clock, .pwr { flex: 1; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="box brand"><span class="logo">&#9670;</span><div><b>OLLAMA 座舱</b><small>本地大模型飞行仪表</small></div></div>
+  <div class="box callsign"><small>当前模型</small><b id="cs-model">&mdash;</b><span id="cs-sub">等待遥测…</span></div>
+  <div class="box ann" id="ann"></div>
+  <div class="box masters">
+    <button class="master caution" id="mc" title="主警戒：有黄色告警。点击确认（停止闪烁）"><span>主</span><span>警戒</span></button>
+    <button class="master warn" id="mw" title="主警告：有红色告警。点击确认（停止闪烁）"><span>主</span><span>警告</span></button>
+  </div>
+  <div class="box pwr" title="CPU 封装功耗（RAPL）+ 显卡板卡功耗。不含主板、内存、硬盘、风扇和电源损耗。"><small>总功耗 CPU+GPU</small><b id="pwr-total">— W</b><span id="pwr-split">CPU — · GPU —</span></div>
+  <button class="box phone" id="phone-btn" title="用手机扫码打开（手机和电脑连同一个 Wi-Fi）" hidden><b>手机</b><small>扫码查看</small></button>
+  <div class="box clock"><b id="clk">--:--:--</b><span id="link">链路 …</span></div>
+  <a class="box gh" href="https://github.com/FelixJiashengFu/ollama-hud" target="_blank" rel="noopener" title="在 GitHub 上收藏（Star）这个项目">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+    <span><b>GitHub</b><small>&#9733; 收藏 <i id="gh-stars"></i></small></span>
+  </a>
+</header>
+
+<div class="modal" id="phone-modal" hidden>
+  <div class="modal-card">
+    <div class="mfd-h"><span>手机查看</span><span class="osb"><button id="phone-close">关闭</button></span></div>
+    <div id="phone-body"></div>
+  </div>
+</div>
+
+<main class="deck">
+  <section class="mfd">
+    <div class="mfd-h"><span>引擎 · 显卡</span><i id="gpu-name"></i></div>
+    <canvas class="dials" id="gpu-dials"></canvas>
+    <div class="rows" id="gpu-rows"></div>
+  </section>
+  <section class="hud-box"><canvas id="hud"></canvas></section>
+  <section class="mfd">
+    <div class="mfd-h"><span>系统 · 处理器与内存</span><i id="cpu-name"></i></div>
+    <canvas class="dials" id="sys-dials"></canvas>
+    <canvas class="cores" id="cores"></canvas>
+    <div class="rows" id="sys-rows"></div>
+  </section>
+</main>
+
+<section class="lower">
+  <section class="mfd">
+    <div class="mfd-h"><span>载荷 · 模型信息</span><i id="pl-digest"></i></div>
+    <div class="rows" id="payload"><div class="empty">尚无模型载入</div></div>
+  </section>
+  <section class="mfd">
+    <div class="mfd-h"><span>挂载 · 层与缓存分配</span><i id="sms-sub"></i></div>
+    <canvas class="layers" id="layers"></canvas>
+    <div class="rows" id="sms"><div class="empty">等待模型载入</div></div>
+  </section>
+  <section class="mfd">
+    <div class="mfd-h"><span>雷达 · 遥测曲线</span>
+      <span class="osb" id="radar-osb"><button data-w="60">1分</button><button data-w="300" class="on">5分</button><button data-w="600">10分</button></span>
+    </div>
+    <canvas id="radar"></canvas>
+  </section>
+  <section class="mfd">
+    <div class="mfd-h"><span>试飞 · 基准测试</span></div>
+    <div class="tf">
+      <div class="tf-row">
+        <select id="tf-model" title="模型"></select>
+        <button class="btn" data-preset="sprint" title="一句话短答">短答</button>
+        <button class="btn" data-preset="cruise" title="中等长度生成，测解码速度">巡航</button>
+        <button class="btn" data-preset="prefill" title="约 1500 token 的长输入，测预填充速度">长输入</button>
+        <button class="btn" data-preset="code" title="写一段代码">代码</button>
+      </div>
+      <textarea id="tf-prompt" spellcheck="false"></textarea>
+      <div class="tf-row">
+        <label>思考 <select id="tf-think"><option value="off">关</option><option value="on">开</option><option value="auto">默认</option></select></label>
+        <label>最多 <input id="tf-max" type="number" min="1" max="8192" value="256"> 字</label>
+        <label>上下文 <select id="tf-ctx"><option value="">默认</option><option>2048</option><option>4096</option><option>8192</option><option>16384</option><option>32768</option></select></label>
+        <label title="先把模型卸载，再测从磁盘加载的时间"><input id="tf-cold" type="checkbox"> 冷启动</label>
+      </div>
+      <div class="tf-row">
+        <button class="btn go" id="tf-go">起飞 &#9654;</button>
+        <button class="btn abort" id="tf-abort" disabled>中止 &#9632;</button>
+        <span id="tf-status">就绪</span>
+      </div>
+      <div id="tf-out"></div>
+      <div class="stats">
+        <div class="stat"><small>首字延迟</small><b id="st-ttft">&mdash;</b></div>
+        <div class="stat"><small>预填速度 tok/s</small><b id="st-pp">&mdash;</b></div>
+        <div class="stat"><small>解码速度 tok/s</small><b id="st-tg">&mdash;</b></div>
+        <div class="stat"><small>加载耗时</small><b id="st-load">&mdash;</b></div>
+        <div class="stat"><small>输入 / 输出</small><b id="st-tok">&mdash;</b></div>
+        <div class="stat"><small>完整耗时</small><b id="st-total">&mdash;</b></div>
+        <div class="stat"><small>能耗 CPU+GPU</small><b id="st-energy">&mdash;</b></div>
+        <div class="stat"><small>能效 tok/焦耳</small><b id="st-eff">&mdash;</b></div>
+      </div>
+    </div>
+  </section>
+  <section class="mfd">
+    <div class="mfd-h"><span>飞行记录</span><i>试飞 = 精确 · 外部 = 其他程序/终端</i>
+      <span class="osb" style="margin-left:8px"><button id="log-csv" title="导出 CSV">导出</button><button id="log-clear" title="清空试飞记录">清空</button></span>
+    </div>
+    <div class="log-wrap"><table>
+      <thead><tr><th>时间</th><th>来源</th><th>输入</th><th>输出</th><th>首字</th><th>预填</th><th>解码</th><th>总耗时</th><th>加载</th><th>能耗</th><th>能效</th><th>状态</th></tr></thead>
+      <tbody id="log"></tbody>
+    </table></div>
+  </section>
+</section>
+
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const C = {
+  hud: '#5dffa8', dim: '#2f9a68', faint: '#1d4a36', cyan: '#59e3ff', amber: '#ffb627', red: '#ff4d4d',
+  magenta: '#ff7ad9', text: '#c9f7df', muted: '#6fa58b', bg: '#010403', glow: 'rgba(93,255,168,0.55)',
+};
+const MONO = '"Cascadia Mono","Cascadia Code",Consolas,"Microsoft YaHei UI",monospace';
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const GiB = 1024 ** 3, MiB = 1024 ** 2;
+const fGiB = (b, d = 2) => b == null ? '—' : (b / GiB).toFixed(d) + ' GiB';
+const fBytes = (b) => b == null ? '—' : b >= GiB ? (b / GiB).toFixed(2) + ' GiB' : (b / MiB).toFixed(0) + ' MiB';
+const fMiB = (m) => m == null ? '—' : m >= 1024 ? (m / 1024).toFixed(2) + ' GiB' : m.toFixed(0) + ' MiB';
+const fM = (m) => m == null ? '—' : m >= 1024 ? (m / 1024).toFixed(2) + 'G' : m.toFixed(0) + 'M';
+const fRate = (bps) => bps == null ? '—' : bps >= 1e9 ? (bps / 1e9).toFixed(2) + ' GB/秒' : (bps / 1e6).toFixed(1) + ' MB/秒';
+const fNum = (n) => n == null ? '—' : Number(n).toLocaleString('en-US');
+const fSec = (s) => s == null || !isFinite(s) ? '—' : s >= 60 ? `${Math.floor(s / 60)}分${String(Math.round(s % 60)).padStart(2, '0')}秒` : s.toFixed(s < 10 ? 2 : 1) + '秒';
+const fTps = (v) => v == null || !isFinite(v) ? '—' : v.toFixed(v >= 100 ? 0 : 1);
+const fJ = (j) => j == null || !isFinite(j) ? '—' : j >= 1000 ? (j / 1000).toFixed(2) + ' kJ' : j.toFixed(0) + ' J';
+const fEff = (v) => v == null || !isFinite(v) ? '—' : v >= 1 ? v.toFixed(2) : v.toFixed(3);
+const fW = (w) => w == null || !isFinite(w) ? '—' : w.toFixed(w >= 100 ? 0 : 1) + ' W';
+const fClock = (s) => s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const fTime = (t) => new Date(t).toLocaleTimeString('en-GB', { hour12: false });
+const parseTime = (s) => s ? Date.parse(String(s).replace(/(\.\d{3})\d+/, '$1')) : NaN;
+const lvlOf = (v, amber, red) => v == null ? 0 : v >= red ? 2 : v >= amber ? 1 : 0;
+const normPath = (p) => (p || '').toLowerCase().replace(/\//g, '\\');
+const isGpuDev = (dev) => /^(CUDA\d|ROCm\d|Vulkan\d|Metal|SYCL\d)/i.test(dev);
+const CAPS = { completion: '文本补全', vision: '视觉', audio: '音频', tools: '工具调用', thinking: '思考', embedding: '向量', insert: '插入' };
+
+// ---------------------------------------------------------------- state
+let snap = null, D = null;
+let hist = [];
+let radarWindow = 300;
+const T = { tps: 0, gpu: 0, cpu: 0, vram: 0, ctx: 0, pitch: 0, roll: 0, fpx: 0, fpy: 0, temp: 0, pwr: 0, cpuPwr: 0, ram: 0, rcores: 0, trend: 0, memUtil: 0 };
+const S = { ...T };
+const prev = { t: 0, tps: 0, gpu: 0 };
+const flight = { active: false, t0: 0, t0Wall: 0, tFirst: null, tokens: 0, liveRate: 0, ctrl: null, e0: null };
+const FLIGHTS_KEY = 'ollamaCockpit.flights';
+let flights = loadFlights();
+let cpuPwrPeak = 0;
+
+function loadFlights() {
+  try { return JSON.parse(localStorage.getItem(FLIGHTS_KEY) || '[]'); } catch { return []; }
+}
+function saveFlights() {
+  if (MODE === 'demo') return;
+  try { localStorage.setItem(FLIGHTS_KEY, JSON.stringify(flights.slice(0, 80))); } catch { /* storage off */ }
+}
+
+// ---------------------------------------------------------------- telemetry link
+// With the local server: live SSE. Without it (GitHub Pages / Hugging Face Space): replay demo/demo.json.
+const REPO = 'https://github.com/FelixJiashengFu/ollama-hud';
+let MODE = 'live';
+
+async function boot() {
+  try {
+    const r = await fetch('/api/history', { cache: 'no-store' });
+    if (r.ok && (r.headers.get('content-type') || '').includes('json')) {
+      const h = await r.json();
+      hist = h.concat(hist.filter((x) => x.t > (h.at(-1)?.t ?? 0)));
+      startLive();
+      return;
+    }
+  } catch { /* no local server */ }
+  startDemo();
+}
+
+function startLive() {
+  const es = new EventSource('/api/stream');
+  es.onmessage = (ev) => { try { onSnap(JSON.parse(ev.data)); } catch (e) { console.error(e); } };
+  es.onerror = () => { $('#link').textContent = '座舱服务断开'; $('#link').className = 'bad'; };
+  loadModelList();
+  fetch('/api/lan').then((r) => r.json()).then((j) => { if (!j.remote) $('#phone-btn').hidden = false; }).catch(() => {});
+}
+
+function shiftSnap(src, off) {
+  // Move every timestamp of a recorded snapshot onto today's clock.
+  const s = structuredClone(src);
+  const add = (o, k) => { if (o && typeof o[k] === 'number') o[k] += off; };
+  const addIso = (o, k) => { const t = o && o[k] ? parseTime(o[k]) : NaN; if (isFinite(t)) o[k] = new Date(t + off).toISOString(); };
+  add(s, 't'); add(s.link, 'since'); add(s.energy, 't'); add(s.win, 't'); add(s.hist, 't');
+  for (const g of s.gpus ?? []) add(g, 't');
+  for (const so of s.sorties ?? []) { add(so, 'start'); add(so, 'end'); }
+  for (const r of s.runners ?? []) {
+    if (r.sortie) { add(r.sortie, 't0'); add(r.sortie, 'tFirst'); }
+    if (r.load) add(r.load, 'startedAt');
+  }
+  for (const m of s.models ?? []) addIso(m, 'expires_at');
+  for (const p of s.win?.procs ?? []) addIso(p, 'started');
+  return s;
+}
+
+async function startDemo() {
+  MODE = 'demo';
+  let data;
+  try { data = await fetch('demo/demo.json').then((r) => r.json()); } catch {
+    $('#link').textContent = '没有连上本地服务，也没有演示数据';
+    $('#link').className = 'bad';
+    return;
+  }
+  const resolve = (v) => v && typeof v === 'object' && v.$ref ? data.statics[v.$ref] : v;
+  for (const s of data.frames) {
+    for (const m of s.models) m.show = resolve(m.show);
+    for (const r of s.runners) for (const k of ['cmd', 'flags', 'props', 'meta', 'load']) r[k] = resolve(r[k]);
+    for (const p of s.win?.procs ?? []) p.cmd = resolve(p.cmd);
+  }
+  const frames = data.frames, rec0 = frames[0].t, dur = frames[frames.length - 1].t - rec0 + 1000;
+  const start = Date.now();
+  let loop = -1, idx = -1;
+  const tick = () => {
+    const el = Date.now() - start;
+    const lap = Math.floor(el / dur), within = el % dur;
+    const off = start + lap * dur - rec0;
+    if (lap !== loop) {
+      loop = lap; idx = -1;
+      flights = (data.flights ?? []).map((f) => ({ ...f, start: f.start + off, end: (f.end ?? f.start) + off }));
+      logKey = null;
+      if (lap === 0) hist = data.history.filter((p) => p.t < rec0).map((p) => ({ ...p, t: p.t + off }));
+    }
+    let i = idx;
+    while (i + 1 < frames.length && frames[i + 1].t - rec0 <= within) i++;
+    if (i !== idx && i >= 0) { idx = i; onSnap(shiftSnap(frames[i], off)); }
+  };
+  tick();
+  setInterval(tick, 200);
+
+  const tf = $('.tf');
+  for (const el of tf.querySelectorAll('.tf-row, #tf-prompt, #tf-out')) el.style.display = 'none';
+  tf.insertAdjacentHTML('afterbegin', `
+    <div class="note demo-note">这是<b>在线演示</b>：网页连不到你电脑上的 Ollama，这里回放的是作者电脑
+    （RTX 2080 8GB · Ryzen 9 9950X3D · 16GB 内存 · gemma4:12b-it-qat）上录制的一段真实数据，包括一次试飞。
+    <br>把项目下载到本机，双击 <b>Start-Cockpit.cmd</b>，就能看自己电脑的实时数据、自己试飞。
+    <br><a href="${REPO}" target="_blank" rel="noopener">去 GitHub 下载 →</a></div>`);
+  if (flights[0]) setStats(flights[0]);
+}
+
+function onSnap(s) {
+  snap = s;
+  if (s.hist && (!hist.length || s.hist.t > hist[hist.length - 1].t)) {
+    hist.push(s.hist);
+    if (hist.length > 700) hist.splice(0, hist.length - 700);
+  }
+  D = derive(s);
+  setTargets(D);
+  updateTop(D);
+  updateGpu(D);
+  updateSys(D);
+  updatePayload(D);
+  updateSms(D);
+  updateLog();
+}
+
+function energyAt(s) {
+  // Energy counters extrapolated from the snapshot to "now" with the current power draw.
+  if (!s?.energy) return null;
+  const dt = (Date.now() - s.energy.t) / 1000;
+  const gpuW = (s.gpus ?? []).reduce((a, g) => a + (g.power ?? 0), 0);
+  const cpuW = s.win?.cpu?.power ?? 0;
+  return { gpuJ: s.energy.gpuJ + gpuW * dt, cpuJ: s.energy.cpuJ == null ? null : s.energy.cpuJ + cpuW * dt };
+}
+
+function derive(s) {
+  const d = { s };
+  d.link = s.link;
+  d.gpu = s.gpus?.[0] ?? null;
+  d.win = s.win;
+  d.procs = s.win?.procs ?? [];
+  d.runner = s.runners.find((r) => r.pid === s.activePid && r.processing) ?? null;
+  d.model = null;
+  if (d.runner) d.model = s.models.find((m) => m.show?.blob && normPath(m.show.blob) === normPath(d.runner.modelBlob)) ?? null;
+  if (!d.model) d.model = s.models[0] ?? null;
+  if (!d.runner && d.model) d.runner = s.runners.find((r) => normPath(r.modelBlob) === normPath(d.model.show?.blob)) ?? null;
+  if (!d.runner) d.runner = s.runners[0] ?? null;
+  d.others = s.models.filter((m) => m !== d.model);
+  d.rproc = d.runner ? d.procs.find((p) => p.pid === d.runner.pid) : null;
+  d.serve = d.procs.find((p) => p.role === 'serve');
+  d.clients = d.procs.filter((p) => p.role === 'client');
+  d.load = d.runner?.load ?? null;
+
+  const slotLive = d.runner?.slotOk;
+  d.tps = slotLive ? (d.runner.processing ? d.runner.rate : 0) : (flight.active ? flight.liveRate : 0);
+  d.nCtx = d.runner?.nCtx ?? d.model?.context_length ?? null;
+  d.ctxUsed = d.runner?.ctxUsed ?? 0;
+  d.ctxLeft = d.nCtx ? Math.max(0, d.nCtx - d.ctxUsed) : null;
+  d.busy = !!(d.runner?.processing || flight.active);
+  d.ttl = d.model ? (parseTime(d.model.expires_at) - Date.now()) / 1000 : null;
+  if (d.ttl != null && d.ttl > 1e7) d.ttl = Infinity;
+  d.gpuShare = d.model && d.model.size ? d.model.size_vram / d.model.size : null;
+  d.memUsedPct = d.win?.mem ? (1 - d.win.mem.avail / d.win.mem.total) * 100 : null;
+  d.logical = d.win?.cpu?.logical ?? null;
+  d.rcores = d.rproc && d.logical ? d.rproc.cpu * d.logical / 100 : null;
+  d.gpuPwr = (s.gpus ?? []).length ? s.gpus.reduce((a, g) => a + (g.power ?? 0), 0) : null;
+  d.cpuPwr = s.win?.cpu?.power ?? null;
+  d.totPwr = d.gpuPwr != null || d.cpuPwr != null ? (d.gpuPwr ?? 0) + (d.cpuPwr ?? 0) : null;
+  d.hardFaults = s.win?.mem?.hardFaults ?? null;
+
+  const L = d.load;
+  if (L?.layersTotal) {
+    d.layersGpu = L.layersGpu;
+    d.layersCpu = L.layersTotal - L.layersGpu;
+  }
+
+  if (!s.link.ok) d.phase = 'NOLINK';
+  else if (flight.active && flight.tFirst === null && (!d.model || (d.runner && !d.runner.slotOk))) d.phase = 'SPOOLUP';
+  else if (d.runner && !d.runner.slotOk) d.phase = 'SPOOLUP';
+  else if (d.runner?.processing) d.phase = d.runner.phase === 'decode' ? 'DECODE' : 'PREFILL';
+  else if (flight.active) d.phase = flight.tFirst !== null ? 'DECODE' : 'PREFILL';
+  else d.phase = d.model ? 'IDLE' : 'PARKED';
+
+  d.last = lastSortie();
+  d.cautions = cautions(d);
+  return d;
+}
+
+function lastSortie() {
+  const a = flights[0] && { ...flights[0], src: 'test' };
+  const b = (snap?.sorties ?? []).find((x) => !overlapsFlight(x));
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return (a.start ?? 0) >= (b.start ?? 0) ? a : b;
+}
+function overlapsFlight(so) {
+  return flights.some((f) => so.start >= f.start - 1500 && so.start <= (f.end ?? f.start) + 1500)
+    || (flight.active && so.start >= flight.t0Wall - 1500);
+}
+
+// ---------------------------------------------------------------- cautions
+const LIGHTS = [
+  ['link', '服务链路', 'Ollama 服务无法连接'],
+  ['parked', '未载入模型', '当前没有模型驻留在内存或显存中'],
+  ['offload', 'CPU 分载', '模型没有全部放进显存，部分层在 CPU 上计算，解码速度会明显下降'],
+  ['vram', '显存将满', '显存占用超过 95%'],
+  ['ram', '内存吃紧', '系统内存占用超过 90%'],
+  ['swap', '内存换页', '内存占用 ≥ 85% 且每秒从磁盘读回大量内存页（硬缺页 ≥ 1000 页/秒为黄，≥ 10000 为红），多半是内存不够、系统在换页'],
+  ['temp', '显卡过热', 'GPU 温度 ≥ 80°C 为黄，≥ 87°C 为红'],
+  ['throttle', '显卡降频', 'GPU 因温度或硬件原因降频'],
+  ['ctx', '上下文将满', '上下文已用 ≥ 85% 为黄，≥ 98% 为红'],
+  ['trunc', '上下文截断', '最近一次请求超出上下文窗口，旧内容被丢弃（模型会“忘记”开头）'],
+  ['fuel', '即将卸载', '模型驻留时间剩余不到 30 秒，之后再用需要重新加载'],
+  ['sensor', '传感器缺失', 'nvidia-smi / 系统采样 / 推理进程 / Ollama 日志有缺失'],
+];
+const REASONS = [[0x1, '空闲'], [0x2, '应用时钟'], [0x4, '功耗墙'], [0x8, '硬件降速'], [0x10, '同步加速'],
+  [0x20, '温度墙'], [0x40, '硬件过热'], [0x80, '电源制动'], [0x100, '显示时钟']];
+function reasonBits(g) { return g?.reasons ? parseInt(g.reasons, 16) || 0 : 0; }
+
+function cautions(d) {
+  const L = {}, why = {};
+  const g = d.gpu;
+  L.link = d.link.ok ? 0 : 2;
+  L.parked = d.link.ok && !d.model ? 'info' : 0;
+  if (d.gpuShare != null && d.gpuShare < 0.995) {
+    L.offload = 1;
+    why.offload = d.layersCpu != null ? `${d.layersCpu} 层在 CPU` : `${Math.round((1 - d.gpuShare) * 100)}% 在 CPU`;
+  }
+  if (g?.memUsed != null && g.memTotal) { L.vram = lvlOf(g.memUsed / g.memTotal, 0.95, 0.99); why.vram = `${(g.memUsed / g.memTotal * 100).toFixed(0)}%`; }
+  if (d.memUsedPct != null) { L.ram = lvlOf(d.memUsedPct, 90, 97); why.ram = `${d.memUsedPct.toFixed(0)}%`; }
+  // Hard faults alone also count memory-mapped file reads by any program; only call it swapping under memory pressure.
+  if (d.hardFaults != null && (d.memUsedPct ?? 0) >= 85) { L.swap = lvlOf(d.hardFaults, 1000, 10000); why.swap = `${fNum(Math.round(d.hardFaults))} 页/秒`; }
+  if (g?.temp != null) { L.temp = lvlOf(g.temp, 80, 87); why.temp = `${g.temp}°C`; }
+  const bits = reasonBits(g);
+  L.throttle = bits & 0xC0 ? 2 : bits & 0x28 ? 1 : 0;
+  if (d.nCtx && d.ctxUsed) { L.ctx = lvlOf(d.ctxUsed / d.nCtx, 0.85, 0.98); why.ctx = `剩 ${fNum(d.ctxLeft)}`; }
+  const recentTrunc = (snap?.sorties ?? []).find((so) => so.truncated && Date.now() - so.end < 10 * 60 * 1000);
+  if (d.runner?.sortie?.shifted) { L.trunc = 2; why.trunc = '当前请求正在截断'; }
+  else if (recentTrunc) { L.trunc = 2; why.trunc = `${fTime(recentTrunc.end)} 那次`; }
+  if (d.model && !d.busy && d.ttl != null && d.ttl < 30) { L.fuel = 1; why.fuel = `${Math.max(0, Math.round(d.ttl))} 秒`; }
+  const missing = [d.s.gpuErr, d.s.winErr, d.model && !d.runner ? '未找到推理进程' : '', d.s.log && !d.s.log.ok ? '读不到 Ollama 日志' : ''].filter(Boolean);
+  const sensorBad = missing.length || (d.model && d.runner && !d.runner.slotOk && d.phase !== 'SPOOLUP');
+  L.sensor = sensorBad ? 1 : 0;
+  if (sensorBad) why.sensor = missing.join(' · ') || '推理进程无响应';
+  return { L, why };
+}
+
+let ackSig = { 1: '', 2: '' };
+$('#mc').onclick = () => { ackSig[1] = sigOf(1); renderMasters(); };
+$('#mw').onclick = () => { ackSig[2] = sigOf(2); renderMasters(); };
+function sigOf(level) {
+  if (!D) return '';
+  return Object.entries(D.cautions.L).filter(([, v]) => v === level).map(([k]) => k).sort().join(',');
+}
+function renderMasters() {
+  for (const [lv, el] of [[1, $('#mc')], [2, $('#mw')]]) {
+    const sig = sigOf(lv);
+    el.classList.toggle('on', !!sig);
+    el.classList.toggle('flash', !!sig && sig !== ackSig[lv]);
+  }
+}
+
+// ---------------------------------------------------------------- top bar
+$('#ann').innerHTML = LIGHTS.map(([id, zh, tip]) => `<div class="light" id="L-${id}" title="${esc(tip)}">${zh}<small id="Ls-${id}"></small></div>`).join('');
+const PHASES = {
+  NOLINK: ['未连接', 'Ollama 服务没有响应', C.red],
+  SPOOLUP: ['加载中', '模型正在载入内存与显存', C.amber],
+  PREFILL: ['预填充', '正在读入提示词', C.cyan],
+  DECODE: ['解码', '正在逐字生成', C.hud],
+  IDLE: ['待命', '模型已驻留，随时可用', C.dim],
+  PARKED: ['停机', '没有载入模型', C.muted],
+};
+
+function updateTop(d) {
+  const m = d.model;
+  $('#cs-model').textContent = m ? m.name : '— 无模型载入 —';
+  $('#cs-sub').textContent = m
+    ? `${m.details?.parameter_size ?? ''} · ${m.details?.quantization_level ?? ''}${d.layersGpu != null ? ` · GPU ${d.layersGpu} 层 / CPU ${d.layersCpu} 层` : ''}${d.others.length ? ` · 另有 ${d.others.length} 个模型` : ''}`
+    : d.link.ok ? '在终端运行 ollama run，或用下方试飞载入模型' : '启动 Ollama 后自动连接';
+  const link = $('#link');
+  link.className = d.link.ok ? '' : 'bad';
+  link.textContent = MODE === 'demo' ? '在线演示 · 回放真实录制数据'
+    : d.link.ok ? `链路正常 · Ollama ${d.link.version ?? '?'}` : `链路中断 ${d.link.err ?? ''}`;
+  $('#pwr-total').textContent = fW(d.totPwr);
+  $('#pwr-split').textContent = `CPU ${fW(d.cpuPwr)} · GPU ${fW(d.gpuPwr)}`;
+  for (const [id, , tip] of LIGHTS) {
+    const v = d.cautions.L[id] ?? 0;
+    const el = $('#L-' + id);
+    el.className = 'light' + (v === 'info' ? ' info' : v === 1 ? ' l1' : v === 2 ? ' l2' : '');
+    const why = d.cautions.why[id];
+    $('#Ls-' + id).textContent = v ? (why ?? '') : '';
+    el.title = why ? `${tip}\n当前：${why}` : tip;
+  }
+  renderMasters();
+}
+setInterval(() => { $('#clk').textContent = new Date().toLocaleTimeString('en-GB', { hour12: false }); }, 250);
+
+// ---------------------------------------------------------------- rows helper
+function rowsHtml(items) {
+  return items.filter(Boolean).map((it) => {
+    const cls = ['row', it.lvl === 1 ? 'l1' : it.lvl === 2 ? 'l2' : '', it.sub ? 'sub' : '', it.head ? 'head' : ''].join(' ');
+    let bar = '';
+    if (it.split) bar = `<span class="bar"><i style="width:${(clamp(it.split[0], 0, 1) * 100).toFixed(1)}%"></i><i class="c" style="width:${(clamp(it.split[1], 0, 1) * 100).toFixed(1)}%"></i></span>`;
+    else if (it.bar != null && isFinite(it.bar)) bar = `<span class="bar"><i style="width:${(clamp(it.bar, 0, 1) * 100).toFixed(1)}%"></i></span>`;
+    const title = it.title ?? String(it.v).replace(/<[^>]*>/g, '');
+    return `<div class="${cls}"><span class="k">${it.k}</span><span class="v" title="${esc(title)}">${it.v}</span>${bar}</div>`;
+  }).join('');
+}
+const sec = (t) => `<div class="sec">${t}</div>`;
+
+function updateGpu(d) {
+  const g = d.gpu;
+  $('#gpu-name').textContent = g?.name ?? (d.s.gpuErr ?? '');
+  if (!g) { $('#gpu-rows').innerHTML = `<div class="empty">${esc(d.s.gpuErr ?? '等待 nvidia-smi…')}</div>`; return; }
+  const bits = reasonBits(g);
+  const reasons = REASONS.filter(([b]) => bits & b).map(([, n]) => n).join(' · ') || '无';
+  const r = d.rproc;
+  const pstateNote = { P0: '最高性能', P2: '高性能', P3: '中等', P5: '低', P8: '节能' }[g.pstate] ?? '';
+  $('#gpu-rows').innerHTML = rowsHtml([
+    { k: '显存', v: `${fNum(g.memUsed)} / ${fNum(g.memTotal)} MiB`, bar: g.memUsed / g.memTotal, lvl: lvlOf(g.memUsed / g.memTotal, 0.95, 0.99) },
+    r && r.gpuDed != null && { k: '推理进程显存', v: `专用 ${fBytes(r.gpuDed)} + 共享 ${fBytes(r.gpuShared)}`, sub: true,
+      title: '来自 Windows「GPU Process Memory」计数器。共享部分其实在系统内存里，比专用显存慢得多。' },
+    { k: '计算利用率', v: `${g.util ?? '—'} %`, bar: (g.util ?? 0) / 100, title: '采样期间 GPU 有多少时间在执行计算（不代表模型有多少放在 GPU）' },
+    { k: '显存控制器利用率', v: `${g.memUtil ?? '—'} %`, bar: (g.memUtil ?? 0) / 100, title: '显存读写忙碌程度；大模型解码通常受显存带宽限制' },
+    { k: '核心频率', v: `${fNum(g.smClock)} / ${fNum(g.smClockMax)} MHz`, bar: g.smClock / g.smClockMax },
+    { k: '显存频率', v: `${fNum(g.memClock)} / ${fNum(g.memClockMax)} MHz`, bar: g.memClock / g.memClockMax },
+    { k: '风扇', v: g.fan == null ? '—' : `${g.fan} %`, bar: (g.fan ?? 0) / 100 },
+    { k: '性能档位', v: `${g.pstate ?? '—'} ${pstateNote}` },
+    { k: 'PCIe 总线', v: g.pcieGen ? `第 ${g.pcieGen} 代 ×${g.pcieWidth}` : '—', title: 'CPU 分载时，层与层之间的数据要经过 PCIe' },
+    { k: '限频原因', v: esc(reasons), lvl: bits & 0xC0 ? 2 : bits & 0x28 ? 1 : 0 },
+  ]);
+}
+
+function updateSys(d) {
+  const w = d.win;
+  $('#cpu-name').textContent = w?.cpu?.name ?? (d.s.winErr ?? '');
+  if (!w) { $('#sys-rows').innerHTML = `<div class="empty">${esc(d.s.winErr ?? '系统采样启动中（约 6 秒）…')}</div>`; return; }
+  const m = w.mem;
+  const used = m.total - m.avail;
+  const commitUsed = m.commitTotal - m.commitAvail;
+  const r = d.rproc, sv = d.serve;
+  const hf = m.hardFaults;
+  $('#sys-rows').innerHTML = rowsHtml([
+    { k: 'CPU 频率', v: w.cpu.mhz ? `${fNum(w.cpu.mhz)} MHz` : '—' },
+    { k: 'CPU 封装功耗', v: w.cpu.power != null ? `${fW(w.cpu.power)}（RAPL）` : '读不到', title: 'Windows「Energy Meter」计数器里的 RAPL 封装功耗' },
+    { k: '总功耗 CPU+GPU', v: fW(d.totPwr), title: '不含主板、内存、硬盘、风扇和电源损耗' },
+    { k: '内存', v: `${fGiB(used, 1)} / ${fGiB(m.total, 1)}`, bar: used / m.total, lvl: lvlOf(used / m.total * 100, 90, 97) },
+    m.swapTotal && { k: '页面文件（交换）', v: `${fGiB(m.swapUsed, 1)} / ${fGiB(m.swapTotal, 1)}`, bar: m.swapUsed / m.swapTotal,
+      title: 'C:\\pagefile.sys 的使用量。内存不够时，系统把内存页写到硬盘上' },
+    { k: '硬缺页（磁盘读入）', v: hf != null ? `${fNum(Math.round(hf))} 页/秒 ≈ ${fRate(hf * 4096)}` : '—', lvl: used / m.total >= 0.85 ? lvlOf(hf, 1000, 10000) : 0,
+      title: '每秒从磁盘读回内存的页数，来源包括页面文件和其他程序的内存映射文件。内存接近满时持续很高，基本就是在换页，会严重拖慢推理' },
+    { k: '提交', v: `${fGiB(commitUsed, 1)} / ${fGiB(m.commitTotal, 1)}`, bar: commitUsed / m.commitTotal, title: '物理内存 + 页面文件' },
+    r ? { k: '推理进程', v: `${esc(r.name)} #${r.pid}`, head: true } : { k: '推理进程', v: '— 未运行 —' },
+    r && { k: '占用', v: `${r.cpu.toFixed(1)} % ≈ ${d.rcores.toFixed(1)} 核`, sub: true, bar: r.cpu / 100 },
+    r && { k: '内存', v: `工作集 ${fBytes(r.ws)} · 私有 ${fBytes(r.priv)}`, sub: true, title: '私有字节包含 CPU 上的模型层和 KV 缓存' },
+    r && r.peakWs != null && { k: '峰值工作集', v: fBytes(r.peakWs), sub: true },
+    r && { k: '缺页', v: r.faults != null ? `${fNum(Math.round(r.faults))} 次/秒` : '—', sub: true, title: '该进程每秒缺页次数（含软缺页）' },
+    r && { k: '线程', v: `${r.threads} 线程 · ${r.handles} 句柄`, sub: true },
+    r && { k: '磁盘', v: `读 ${fRate(r.ioRead)} · 写 ${fRate(r.ioWrite)}`, sub: true, title: '载入模型时读盘会冲高' },
+    r && { k: '运行时长', v: fClock((Date.now() - parseTime(r.started)) / 1000), sub: true },
+    sv && { k: '服务进程', v: `ollama serve #${sv.pid} · ${sv.cpu.toFixed(1)}% · ${fBytes(sv.ws)}` },
+    { k: '终端会话', v: d.clients.length ? d.clients.map((c) => esc((c.cmd ?? '').replace(/^.*ollama(\.exe)?"?\s*/i, 'ollama '))).join(' | ') : '0',
+      title: d.clients.map((c) => c.cmd).join('\n') },
+  ]);
+}
+
+// ---------------------------------------------------------------- model information
+let payloadKey = '';
+function updatePayload(d) {
+  const m = d.model;
+  const el = $('#payload');
+  if (!m) {
+    if (payloadKey !== 'none') { el.innerHTML = `<div class="empty">尚无模型载入<br><small>在终端运行 <b>ollama run 模型名</b>，或用「试飞」</small></div>`; payloadKey = 'none'; }
+    $('#pl-digest').textContent = '';
+    return;
+  }
+  const r = d.runner;
+  const key = [m.digest, m.size_vram, m.context_length, r?.pid, !!r?.meta, !!r?.params, !!d.load?.model, d.others.length].join('|');
+  if (key !== payloadKey) { payloadKey = key; el.innerHTML = payloadHtml(d); }
+  $('#pl-digest').textContent = `摘要 ${m.digest?.slice(0, 12) ?? ''}`;
+  const ctx = $('#pl-ctx');
+  if (ctx) ctx.innerHTML = d.nCtx ? `${fNum(d.ctxUsed)} / ${fNum(d.nCtx)} · <span class="${d.ctxLeft / d.nCtx < 0.15 ? 'c' : 'g'}">剩 ${fNum(d.ctxLeft)}</span>` : '—';
+  const ttl = $('#pl-ttl');
+  if (ttl) ttl.textContent = d.busy ? '使用中' : d.ttl === Infinity ? '永久驻留' : d.ttl != null ? `${fClock(Math.max(0, d.ttl))} 后卸载` : '—';
+}
+
+function payloadHtml(d) {
+  const m = d.model, r = d.runner, info = m.show?.info ?? {}, L = d.load;
+  const arch = info['general.architecture'] ?? m.details?.family ?? '';
+  const A = (k) => info[`${arch}.${k}`];
+  const uniq = (v) => Array.isArray(v) ? [...new Set(v)].join('/') : v;
+  const swaPattern = A('attention.sliding_window_pattern');
+  const swaLayers = Array.isArray(swaPattern) ? swaPattern.filter(Boolean).length : null;
+  const experts = A('expert_count');
+  const archKind = experts ? '混合专家' : '稠密';
+  const archSub = experts ? `${experts} 专家 · 每 token 激活 ${A('expert_used_count') ?? '?'}` : `${arch} · ${A('block_count') ?? '?'} 层 · 每 token 全部参数参与`;
+  const qat = /qat/i.test(m.name + ' ' + (info['general.finetune'] ?? ''));
+  const params = info['general.parameter_count'];
+  const weightMiB = L ? Object.values(L.model).reduce((a, b) => a + b, 0) : null;
+  const bpw = params && weightMiB ? weightMiB * MiB * 8 / params : null;
+  const native = A('context_length');
+  const p = r?.params;
+  const sampling = p
+    ? `温度 ${+p.temperature.toFixed(2)} · top_k ${p.top_k} · top_p ${+p.top_p.toFixed(2)} · min_p ${+(p.min_p ?? 0).toFixed(2)}`
+    : (m.show?.parameters ?? '').trim().split(/\n/).map((l) => l.trim().replace(/\s+/, ' ')).join(' · ');
+  return `
+    <div class="pl-name"><b>${esc(m.name)}</b><span>${esc(info['general.finetune'] ?? '')}</span></div>
+    <div class="tiles">
+      <div class="tile"><small>参数量</small><b>${esc(m.details?.parameter_size ?? '—')}</b><span>${params ? fNum(params) + ' 个' : ''}</span></div>
+      <div class="tile"><small>模型架构</small><b>${archKind}</b><span title="${esc(archSub)}">${esc(archSub)}</span></div>
+      <div class="tile"><small>量化格式</small><b>${esc(m.details?.quantization_level ?? '—')}${qat ? ' · QAT' : ''}</b><span>${qat ? '量化感知训练 · ' : ''}${bpw ? `平均 ${bpw.toFixed(2)} 位/参数` : esc((m.details?.format ?? '').toUpperCase())}</span></div>
+      <div class="tile"><small>文件大小</small><b>${m.disk ? fGiB(m.disk) : '—'}</b><span>载入后占用 ${fGiB(m.size)}</span></div>
+    </div>
+    ${rowsHtml([
+      { k: '模型家族', v: esc(m.details?.family ?? arch) },
+      { k: '层数', v: A('block_count') ? `${A('block_count')} · 隐藏 ${A('embedding_length')} · 前馈 ${A('feed_forward_length')}` : '—',
+        title: A('block_count') ? `${A('block_count')} 层 · 隐藏维度 ${fNum(A('embedding_length'))} · 前馈维度 ${fNum(A('feed_forward_length'))}` : '' },
+      A('attention.head_count') && { k: '注意力', v: `${uniq(A('attention.head_count'))} 头 · KV ${uniq(A('attention.head_count_kv'))}${A('attention.sliding_window') ? ` · 滑窗 ${A('attention.sliding_window')}` : ''}`,
+        title: `${uniq(A('attention.head_count'))} 个注意力头 · KV 头 ${uniq(A('attention.head_count_kv'))}${A('attention.sliding_window') ? ` · 滑动窗口 ${fNum(A('attention.sliding_window'))}${swaLayers != null ? `（${swaLayers}/${swaPattern.length} 层用滑窗）` : ''}` : ''}` },
+      native && { k: '原生上下文上限', v: fNum(native), title: '模型训练时支持的最大长度（token）；能否跑满取决于内存' },
+      { k: '当前窗口', v: d.nCtx ? `${fNum(d.nCtx)}${native ? `（原生的 ${(d.nCtx / native * 100).toFixed(1)}%）` : ''}` : '—' },
+      { k: '已用 / 剩余', v: `<span id="pl-ctx"></span>` },
+      r?.meta?.n_vocab && { k: '词表', v: fNum(r.meta.n_vocab) },
+      { k: '驻留', v: `<span id="pl-ttl"></span>` },
+      sampling && { k: '默认采样', v: esc(sampling), title: sampling },
+      m.show?.license && { k: '许可证', v: esc(m.show.license) },
+      m.show?.modified_at && { k: '下载/修改', v: new Date(parseTime(m.show.modified_at)).toLocaleString('zh-CN', { hour12: false }) },
+      d.others.length && { k: '其他已载入', v: d.others.map((o) => esc(o.name)).join(', ') },
+    ])}
+    <div class="chips">${(m.show?.capabilities ?? []).map((c) => `<span class="chip cap">${esc(CAPS[c] ?? c)}</span>`).join('')}</div>`;
+}
+
+// ---------------------------------------------------------------- stores: layers, weights, KV
+let smsKey = '';
+function updateSms(d) {
+  const el = $('#sms');
+  const L = d.load, m = d.model, r = d.runner;
+  if (!m || !r) {
+    if (smsKey !== 'none') { el.innerHTML = `<div class="empty">等待模型载入</div>`; smsKey = 'none'; }
+    $('#sms-sub').textContent = '';
+    return;
+  }
+  if (!L) {
+    if (smsKey !== 'nolog') {
+      el.innerHTML = `<div class="empty">没有在 Ollama 日志里找到这次加载的记录<br><small>${esc(d.s.log?.path ?? '')}</small></div>`;
+      smsKey = 'nolog';
+    }
+    return;
+  }
+  const sum = (o, gpu) => Object.entries(o).filter(([k]) => isGpuDev(k) === gpu).reduce((a, [, v]) => a + v, 0);
+  const wG = sum(L.model, true), wC = sum(L.model, false);
+  const kG = sum(L.kv, true), kC = sum(L.kv, false);
+  const cG = sum(L.compute, true), cC = sum(L.compute, false);
+  const layerPct = L.layersTotal ? L.layersGpu / L.layersTotal : null;
+  const wPct = wG + wC ? wG / (wG + wC) : null;
+  const kvType = L.kvCaches[0] ? `${L.kvCaches[0].typeK}/${L.kvCaches[0].typeV}` : '—';
+  $('#sms-sub').textContent = L.startedAt ? `${fTime(L.startedAt)} 载入` : '';
+  const key = [L.port, L.layersGpu, wG, kG, L.loadSeconds, d.ctxUsed, d.rproc?.gpuDed].join('|');
+  if (key === smsKey) return;
+  smsKey = key;
+  const fill = (c) => Math.min(d.ctxUsed, c.cells) / c.cells;
+  el.innerHTML = rowsHtml([
+    { k: '模型层', v: L.layersTotal ? `<span class="g">GPU ${L.layersGpu}</span> · <span class="c">CPU ${L.layersTotal - L.layersGpu}</span> / ${L.layersTotal}` : '—',
+      split: layerPct != null ? [layerPct, 1 - layerPct] : null, title: '含输出层。llama.cpp 从后往前把层放进显存，前面的层留在 CPU' },
+    { k: '模型权重', v: `<span class="g">GPU ${fM(wG)}</span> · <span class="c">CPU ${fM(wC)}</span>`, split: wPct != null ? [wPct, 1 - wPct] : null,
+      title: Object.entries(L.model).map(([k, v]) => `${k}: ${v.toFixed(1)} MiB`).join('\n') },
+    { k: 'KV 缓存', v: `<span class="g">GPU ${fM(kG)}</span> · <span class="c">CPU ${fM(kC)}</span> · ${esc(kvType)}`,
+      split: kG + kC ? [kG / (kG + kC), kC / (kG + kC)] : null, title: `KV 缓存的存放位置与精度（${kvType}）。在 CPU 上的那部分属于 CPU 层` },
+    ...L.kvCaches.map((c) => ({ k: c.kind === 'SWA' ? '滑窗缓存' : c.kind === 'non-SWA' ? '全局缓存' : 'KV 缓存', sub: true,
+      v: `${c.cells}格×${c.layers}层 ${fM(c.mib)} · 用 ${(fill(c) * 100).toFixed(0)}%`, bar: fill(c),
+      title: `${fNum(c.cells)} 格 × ${c.layers} 层 = ${fMiB(c.mib)}，已用 ${(fill(c) * 100).toFixed(1)}%` })),
+    { k: '计算缓冲', v: `<span class="g">GPU ${fM(cG)}</span> · <span class="c">CPU ${fM(cC)}</span>` },
+    L.mmprojMiB && { k: '视觉/音频投影', v: `最多 ${fM(L.mmprojMiB)}`, title: '多模态编码器（看图、听音频）用的显存估算' },
+    { k: 'GPU 比例', v: `层 ${layerPct != null ? (layerPct * 100).toFixed(0) : '—'}% · 权重 ${wPct != null ? (wPct * 100).toFixed(0) : '—'}% · Ollama ${d.gpuShare != null ? (d.gpuShare * 100).toFixed(0) : '—'}%`,
+      title: '层比例、权重比例和 Ollama 显存比例是三个不同的指标，不要混为一谈' },
+    d.rproc?.gpuDed != null && { k: '进程显存', v: `专用 ${fBytes(d.rproc.gpuDed)} · 共享 ${fBytes(d.rproc.gpuShared)}` },
+    { k: '推理线程', v: L.threads ? `${L.threads} / ${L.threadsMax} 逻辑核` : '—', title: L.threads ? `生成 ${L.threads} 线程，批处理 ${L.threadsBatch} 线程` : '' },
+    { k: '计算后端', v: esc(L.backends.join(' + ') || '—') },
+    { k: 'Flash Attention', v: L.flashAttn === 'enabled' ? '已启用' : L.flashAttn === 'auto' ? '自动' : esc(L.flashAttn ?? '—') },
+    L.device && { k: '计算设备', v: esc(L.device) },
+    { k: '加载耗时', v: L.loadSeconds != null ? fSec(L.loadSeconds) : '加载中…', lvl: L.loadSeconds > 30 ? 1 : 0, title: '从启动推理进程到模型就绪（含预热）' },
+    L.sysFree && { k: '加载时空闲', v: `内存 ${esc(L.sysFree)} / ${esc(L.sysTotal)} · 交换 ${esc(L.swapFree)} · 显存 ${esc(L.gpuAvail ?? '—')}` },
+  ]) + (L.layersTotal && L.layersGpu < L.layersTotal
+    ? `<div class="note">有 ${L.layersTotal - L.layersGpu} 层在 CPU 上：每生成一个 token，GPU 算完自己的层后都要等 CPU 算完这几层（还要读 ${fMiB(wC)} 权重），所以解码速度主要被 CPU 和内存带宽限制。</div>` : '');
+}
+
+function drawLayers() {
+  const { g, w, h } = surface('layers');
+  const L = D?.load;
+  g.font = `11px ${MONO}`;
+  if (!L?.layersTotal) { g.fillStyle = C.muted; text(g, '层分布：等待加载日志', 0, h / 2, 'left'); return; }
+  const n = L.layersTotal, nCpu = n - L.layersGpu;
+  const gap = 2, top = 14, bh = h - top - 14;
+  const cw = (w - gap * (n - 1)) / n;
+  for (let i = 0; i < n; i++) {
+    const onCpu = i < nCpu;
+    g.fillStyle = onCpu ? C.amber : C.hud;
+    g.shadowColor = g.fillStyle; g.shadowBlur = 4;
+    g.globalAlpha = onCpu ? 0.85 : 0.75;
+    g.fillRect(i * (cw + gap), top, cw, bh);
+  }
+  g.globalAlpha = 1; g.shadowBlur = 0;
+  g.fillStyle = C.muted;
+  text(g, '每格 = 一层（左：第 0 层 → 右：输出层）', 0, 6, 'left');
+  g.fillStyle = C.amber; text(g, `CPU ${nCpu} 层`, 0, h - 5, 'left');
+  g.fillStyle = C.hud; text(g, `GPU ${L.layersGpu} 层`, w, h - 5, 'right');
+}
+
+// ---------------------------------------------------------------- flight log
+let logKey = null;
+function logEntries() {
+  const ext = (snap?.sorties ?? []).filter((so) => !overlapsFlight(so)).map((so) => ({ ...so, src: 'runner' }));
+  return flights.map((f) => ({ ...f, src: 'test' })).concat(ext).sort((a, b) => b.start - a.start).slice(0, 60);
+}
+function statusOf(r) {
+  if (r.truncated) return ['截断', 'bad'];
+  if (r.cancelled || r.aborted) return ['中止', 'warn'];
+  if (r.src === 'runner' && !r.exact) return ['估算', 'warn'];
+  if (r.cold) return ['冷启', 'ok'];
+  return ['正常', 'ok'];
+}
+function linkFlightsToRunner() {
+  // Borrow the runner's truncation flag for test flights once its log line has arrived.
+  let changed = false;
+  for (const f of flights) {
+    if (f.truncChecked) continue;
+    const so = (snap?.sorties ?? []).find((x) => x.start >= f.start - 1500 && x.start <= (f.end ?? f.start) + 1500 && x.final);
+    if (so) { f.truncated = !!so.truncated; f.truncChecked = true; changed = true; }
+    else if (Date.now() - (f.end ?? f.start) > 60000) { f.truncChecked = true; changed = true; }
+  }
+  if (changed) saveFlights();
+}
+function updateLog() {
+  linkFlightsToRunner();
+  const rows = logEntries();
+  const key = rows.map((r) => `${r.start}${r.exact ? 'x' : ''}${r.truncated ? 't' : ''}${r.energyJ ? 'e' : ''}`).join(',');
+  if (key === logKey) return;
+  logKey = key;
+  $('#log').innerHTML = rows.length ? rows.map((r) => {
+    const [st, cls] = statusOf(r);
+    const eff = r.energyJ && r.decoded ? r.decoded / r.energyJ : null;
+    const tip = [r.model, r.src === 'runner' ? (r.exact ? '外部请求 · 数值来自推理进程日志（精确）' : '外部请求 · 由采样估算') : 'Ollama 返回的统计（精确）',
+      r.cached ? `复用缓存 ${r.cached} token` : '', r.reprocess ? '缓存未命中，整段提示词重算' : '',
+      r.tpotMs ? `每 token ${r.tpotMs.toFixed(0)} ms` : '', r.cpuJ != null ? `CPU ${fJ(r.cpuJ)} · GPU ${fJ(r.gpuJ)}` : ''].filter(Boolean).join('\n');
+    return `<tr title="${esc(tip)}">
+      <td>${fTime(r.start)}</td>
+      <td class="src-${r.src}">${r.src === 'test' ? '试飞' : '外部'}</td>
+      <td>${fNum(r.promptTokens)}</td><td>${fNum(r.decoded)}</td>
+      <td>${fSec(r.ttft)}</td><td>${fTps(r.ppRate)}</td><td class="hi">${fTps(r.tgRate)}</td>
+      <td>${fSec(r.runnerMs != null ? r.runnerMs / 1000 : r.total)}</td><td>${r.load != null && r.load >= 0.5 ? fSec(r.load) : ''}</td>
+      <td>${fJ(r.energyJ)}</td><td>${fEff(eff)}</td><td class="${cls}">${st}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="12" class="empty" style="text-align:center">暂无记录 · 终端聊天、其他程序调用或点「起飞」都会记在这里</td></tr>`;
+}
+$('#log-clear').onclick = () => { flights = []; saveFlights(); logKey = null; updateLog(); };
+$('#log-csv').onclick = () => {
+  const head = '时间,来源,模型,输入token,输出token,首字延迟_秒,预填_tok每秒,解码_tok每秒,加载_秒,完整耗时_秒,能耗_焦耳,CPU能耗_焦耳,GPU能耗_焦耳,能效_tok每焦耳,截断,冷启动';
+  const n = (v, d) => v == null || !isFinite(v) ? '' : v.toFixed(d);
+  const lines = logEntries().map((r) => [new Date(r.start).toISOString(), r.src === 'test' ? '试飞' : '外部', r.model ?? '', r.promptTokens ?? '', r.decoded ?? '',
+    n(r.ttft, 3), n(r.ppRate, 2), n(r.tgRate, 2), n(r.load, 3), n(r.runnerMs != null ? r.runnerMs / 1000 : r.total, 3),
+    n(r.energyJ, 1), n(r.cpuJ, 1), n(r.gpuJ, 1), n(r.energyJ && r.decoded ? r.decoded / r.energyJ : null, 4), r.truncated ? 1 : 0, r.cold ? 1 : 0].join(','));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + head + '\n' + lines.join('\n')], { type: 'text/csv' }));
+  a.download = `ollama-飞行记录-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+// ---------------------------------------------------------------- targets + smoothing
+function setTargets(d) {
+  const now = performance.now();
+  const g = d.gpu;
+  T.tps = d.tps;
+  T.gpu = g?.util ?? 0;
+  T.memUtil = g?.memUtil ?? 0;
+  T.cpu = d.win?.cpu?.total ?? 0;
+  T.vram = g?.memUsed ?? 0;
+  T.ctx = d.ctxUsed;
+  T.temp = g?.temp ?? 0;
+  T.pwr = d.gpuPwr ?? 0;
+  T.cpuPwr = d.cpuPwr ?? 0;
+  T.ram = d.memUsedPct ?? 0;
+  T.rcores = d.rcores ?? 0;
+  T.pitch = T.gpu;
+  T.roll = clamp((T.cpu - T.gpu) * 0.4, -35, 35);
+  cpuPwrPeak = Math.max(cpuPwrPeak, d.cpuPwr ?? 0);
+  const dt = (now - prev.t) / 1000;
+  if (prev.t && dt > 0.05) {
+    T.trend = clamp((d.tps - prev.tps) / dt, -20, 20);
+    T.fpx = clamp(T.trend * 6, -60, 60);
+    T.fpy = clamp(-(T.gpu - prev.gpu) / dt * 0.8, -40, 40);
+  }
+  prev.t = now; prev.tps = d.tps; prev.gpu = T.gpu;
+}
+
+// ---------------------------------------------------------------- canvas plumbing
+const canvases = new Map();
+function surface(id) {
+  let c = canvases.get(id);
+  if (!c) {
+    const el = document.getElementById(id);
+    c = { el, g: el.getContext('2d'), w: 0, h: 0, dpr: 1 };
+    canvases.set(id, c);
+  }
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.el.clientWidth, h = c.el.clientHeight;
+  if (w !== c.w || h !== c.h || dpr !== c.dpr) {
+    c.w = w; c.h = h; c.dpr = dpr;
+    c.el.width = Math.max(1, Math.round(w * dpr));
+    c.el.height = Math.max(1, Math.round(h * dpr));
+  }
+  c.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.g.clearRect(0, 0, w, h);
+  return c;
+}
+function line(g, x1, y1, x2, y2) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
+function text(g, s, x, y, align = 'left', base = 'middle') { g.textAlign = align; g.textBaseline = base; g.fillText(s, x, y); }
+function glow(g, color, blur = 5) { g.strokeStyle = color; g.fillStyle = color; g.shadowColor = color; g.shadowBlur = blur; }
+
+// ---------------------------------------------------------------- HUD
+function drawHud(now) {
+  const { g, w, h } = surface('hud');
+  if (w < 10 || h < 10) return;
+  const fs = clamp(Math.min(w / 46, h / 30), 10, 17);
+  const big = fs * 1.5;
+  const cx = w / 2, cy = h * 0.5;
+  const narrow = w < 560; // phone: the top bar already shows model and power, so drop the duplicates
+  const tx = Math.min(w * 0.36, w / 2 - fs * 6.8); // keep the tape readout boxes inside the HUD
+  g.lineWidth = 1.4;
+  g.font = `${fs}px ${MONO}`;
+  glow(g, C.hud, 5);
+  const d = D;
+  const hasModel = !!d?.model;
+
+  // pitch ladder (pitch = GPU util %)
+  const k = h * 0.0042;
+  const roll = S.roll * Math.PI / 180;
+  g.save();
+  g.beginPath(); g.rect(cx - w * 0.26, h * 0.25, w * 0.52, h * 0.5); g.clip();
+  g.translate(cx, cy); g.rotate(roll); g.translate(0, S.pitch * k);
+  const HW = w * 0.3, gap = w * 0.055;
+  g.lineWidth = 1.8;
+  line(g, -HW, 0, -gap, 0); line(g, gap, 0, HW, 0);
+  g.lineWidth = 1.3;
+  const step = k * 10 >= fs * 1.7 ? 10 : 20; // thin the ladder on short screens
+  for (let p = -40; p <= 100; p += step) {
+    if (!p) continue;
+    const y = -p * k, L = w * 0.065, gp = w * 0.04, tick = fs * 0.6 * (p > 0 ? 1 : -1);
+    g.setLineDash(p < 0 ? [6, 5] : []);
+    line(g, -gp - L, y, -gp, y); line(g, gp, y, gp + L, y);
+    line(g, -gp - L, y, -gp - L, y + tick); line(g, gp + L, y, gp + L, y + tick);
+    g.setLineDash([]);
+    if (p > 0) { text(g, String(p), -gp - L - 6, y, 'right'); text(g, String(p), gp + L + 6, y, 'left'); }
+  }
+  g.restore();
+
+  // boresight + flight path marker
+  g.lineWidth = 1.8;
+  const bw = fs * 1.4;
+  g.beginPath();
+  g.moveTo(cx - bw * 2, cy); g.lineTo(cx - bw, cy); g.lineTo(cx - bw / 2, cy + bw * 0.55); g.lineTo(cx, cy);
+  g.lineTo(cx + bw / 2, cy + bw * 0.55); g.lineTo(cx + bw, cy); g.lineTo(cx + bw * 2, cy);
+  g.stroke();
+  const fx = cx + S.fpx, fy = cy - h * 0.12 + S.fpy, fr = fs * 0.45;
+  g.lineWidth = 1.5;
+  g.beginPath(); g.arc(fx, fy, fr, 0, Math.PI * 2); g.stroke();
+  line(g, fx - fr * 3, fy, fx - fr, fy); line(g, fx + fr, fy, fx + fr * 3, fy); line(g, fx, fy - fr, fx, fy - fr * 2.2);
+
+  // bank scale (CPU vs GPU load)
+  const R = h * 0.31;
+  g.lineWidth = 1.3;
+  for (const a of [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60]) {
+    const r = a * Math.PI / 180, len = a % 30 === 0 ? fs * 0.9 : fs * 0.5;
+    line(g, cx + R * Math.sin(r), cy - R * Math.cos(r), cx + (R + len) * Math.sin(r), cy - (R + len) * Math.cos(r));
+  }
+  g.beginPath(); g.arc(cx, cy, R, -Math.PI / 2 - Math.PI / 3, -Math.PI / 2 + Math.PI / 3); g.stroke();
+  const pr = -S.roll * Math.PI / 180;
+  const px = cx + (R - 3) * Math.sin(pr), py = cy - (R - 3) * Math.cos(pr);
+  g.save(); g.translate(px, py); g.rotate(pr);
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(-fs * 0.5, fs * 0.85); g.lineTo(fs * 0.5, fs * 0.85); g.closePath(); g.fill();
+  g.restore();
+  g.font = `${fs * 0.85}px ${MONO}`;
+  const la = 70 * Math.PI / 180;
+  glow(g, C.amber, 4); text(g, 'CPU', cx - (R + fs) * Math.sin(la), cy - (R + fs) * Math.cos(la), 'center');
+  glow(g, C.cyan, 4); text(g, 'GPU', cx + (R + fs) * Math.sin(la), cy - (R + fs) * Math.cos(la), 'center');
+  glow(g, C.hud, 5);
+
+  // context tape (heading)
+  const nCtx = d?.nCtx || 4096;
+  hTape(g, cx, h * 0.035, w * 0.44, S.ctx, nCtx, fs, big, !!d?.runner);
+
+  // speed tape: decode tok/s
+  const tapeH = h * 0.44;
+  const peak = Math.max(d?.runner?.peak ?? 0, ...flights.slice(0, 10).map((f) => f.tgRate ?? 0));
+  vTape(g, {
+    x: cx - tx, yc: cy, H: tapeH, value: S.tps, pxPer: tapeH / 30, minor: 1, major: 5, side: 'left', fs, big,
+    fmt: (v) => v.toFixed(1), label: (v) => String(v), min: 0,
+    title: '解码速度', sub: 'tok/s', foot: `峰值 ${fTps(peak)}`,
+    bug: d?.last?.tgRate, trend: S.trend * 3,
+  });
+
+  // altitude tape: VRAM MiB
+  const memTotal = d?.gpu?.memTotal ?? 8192;
+  vTape(g, {
+    x: cx + tx, yc: cy, H: tapeH, value: S.vram, pxPer: tapeH / (memTotal * 0.55), minor: 256, major: 1024, side: 'right', fs, big,
+    fmt: (v) => Math.round(v).toString(), label: (v) => (v / 1024) + 'G', min: 0, ceiling: memTotal,
+    title: '显存', sub: 'MiB', foot: `共 ${fNum(memTotal)}`,
+    bug: d?.model ? d.model.size_vram / MiB : null,
+  });
+
+  // phase annunciation + live request
+  const ph = PHASES[d?.phase ?? 'PARKED'];
+  const blink = (d?.phase === 'SPOOLUP' || d?.phase === 'NOLINK') && Math.floor(now / 400) % 2 === 0;
+  if (!blink) {
+    glow(g, ph[2], 8);
+    g.font = `bold ${big * 1.15}px ${MONO}`;
+    text(g, `◆ ${ph[0]} ◆`, cx, h * 0.83, 'center');
+    g.font = `${fs}px ${MONO}`;
+    text(g, ph[1], cx, h * 0.83 + big, 'center');
+  }
+  const run = d?.runner;
+  if (run?.processing && run.sortie) {
+    g.font = `${fs * 0.9}px ${MONO}`; glow(g, C.text, 3);
+    const input = run.task?.promptTokens ?? run.promptTokens;
+    text(g, `本次 输入 ${fNum(input)} · 输出 ${fNum(run.decoded)} · 已用 ${fClock((Date.now() - run.sortie.t0) / 1000)}`, cx, h * 0.83 + big * 1.9, 'center');
+  }
+  glow(g, C.hud, 5);
+
+  // corner data blocks
+  g.font = `${fs}px ${MONO}`;
+  const gpu = d?.gpu;
+  const lx = w * 0.03, rx = w * 0.97, by = h * 0.79, lh = fs * 1.35;
+  glow(g, C.magenta, 6);
+  g.font = `bold ${fs * 1.1}px ${MONO}`;
+  text(g, `总功耗 ${d?.totPwr != null ? Math.round(S.pwr + S.cpuPwr) : '—'} W`, lx, by, 'left');
+  g.font = `${fs}px ${MONO}`;
+  glow(g, C.hud, 5);
+  text(g, `GPU ${gpu?.power != null ? Math.round(S.pwr) : '—'} W · CPU ${d?.cpuPwr != null ? Math.round(S.cpuPwr) : '—'} W`, lx, by + lh, 'left');
+  const tempCol = (gpu?.temp ?? 0) >= 87 ? C.red : (gpu?.temp ?? 0) >= 80 ? C.amber : C.hud;
+  glow(g, tempCol, 5); text(g, `温度 ${gpu?.temp != null ? Math.round(S.temp) : '—'} °C`, lx, by + lh * 2, 'left'); glow(g, C.hud, 5);
+  text(g, `CPU ${S.cpu.toFixed(0)}% · 推理 ${S.rcores.toFixed(1)} 核`, lx, by + lh * 3, 'left');
+
+  const last = d?.last;
+  const eff = last?.energyJ && last?.decoded ? last.decoded / last.energyJ : null;
+  text(g, `首字 ${fSec(last?.ttft)}`, rx, by, 'right');
+  text(g, `预填 ${fTps(last?.ppRate)} tok/s`, rx, by + lh, 'right');
+  text(g, `解码 ${fTps(last?.tgRate)} tok/s`, rx, by + lh * 2, 'right');
+  text(g, `能效 ${fEff(eff)} tok/J`, rx, by + lh * 3, 'right');
+  g.fillStyle = C.muted; g.shadowBlur = 0;
+  text(g, last ? `上次 ${last.src === 'test' ? '试飞' : '外部'} ${fTime(last.start)}` : '上次 —', rx, by + lh * 4, 'right');
+  glow(g, C.hud, 5);
+
+  if (narrow) return;
+
+  // top-left: model; top-right: keep-alive "fuel"
+  const ty = h * 0.05;
+  g.font = `${fs * 0.85}px ${MONO}`; g.fillStyle = C.muted; g.shadowBlur = 0;
+  text(g, '模型', lx, ty, 'left');
+  text(g, '驻留 · 到时自动卸载', rx, ty, 'right');
+  glow(g, C.hud, 5); g.font = `${fs}px ${MONO}`;
+  const name = d?.model?.name ?? '— 停机 —';
+  text(g, name.length > 24 ? name.slice(0, 23) + '…' : name, lx, ty + lh, 'left');
+  if (hasModel) {
+    const sh = d.gpuShare ?? 1;
+    glow(g, sh < 0.995 ? C.amber : C.hud, 5);
+    text(g, d.layersGpu != null ? `GPU ${d.layersGpu} 层 / CPU ${d.layersCpu} 层` : `GPU ${(sh * 100).toFixed(0)}% / CPU ${((1 - sh) * 100).toFixed(0)}%`, lx, ty + lh * 2, 'left');
+    glow(g, C.hud, 5);
+    const ttl = d.ttl;
+    const fuelTxt = d.busy ? '使用中' : ttl === Infinity ? '永久' : ttl != null ? fClock(Math.max(0, ttl)) : '—';
+    const low = !d.busy && ttl != null && ttl < 30;
+    glow(g, low ? C.amber : C.hud, 5);
+    text(g, fuelTxt, rx, ty + lh, 'right');
+    const bwid = w * 0.14, frac = d.busy || ttl === Infinity ? 1 : clamp((ttl ?? 0) / 300, 0, 1);
+    g.strokeRect(rx - bwid, ty + lh * 1.75, bwid, fs * 0.6);
+    g.fillRect(rx - bwid, ty + lh * 1.75, bwid * frac, fs * 0.6);
+    glow(g, C.hud, 5);
+  }
+  g.font = `${fs * 0.75}px ${MONO}`; g.fillStyle = C.faint; g.shadowBlur = 0;
+  text(g, '俯仰 = GPU 利用率 · 横滚 = CPU 与 GPU 负载差', cx, h * 0.985, 'center', 'bottom');
+}
+
+function vTape(g, o) {
+  const { x, yc, H, value, pxPer, minor, major, side, fs, big } = o;
+  const dir = side === 'left' ? -1 : 1;
+  const top = yc - H / 2, bot = yc + H / 2;
+  g.save();
+  g.lineWidth = 1.3;
+  line(g, x, top, x, bot);
+  g.beginPath(); g.rect(x - 200, top, 400, H); g.clip();
+  const span = H / 2 / pxPer;
+  const v0 = Math.floor((value - span) / minor) * minor;
+  for (let v = v0; v <= value + span; v += minor) {
+    if (v < (o.min ?? -Infinity)) continue;
+    const y = yc - (v - value) * pxPer;
+    const isMajor = Math.abs(v / major - Math.round(v / major)) < 1e-6;
+    const over = o.ceiling != null && v > o.ceiling;
+    if (over) glow(g, C.red, 4);
+    line(g, x, y, x + dir * (isMajor ? fs * 0.9 : fs * 0.45), y);
+    if (isMajor) text(g, o.label(v), x + dir * fs * 1.3, y, side === 'left' ? 'right' : 'left');
+    if (over) glow(g, C.hud, 5);
+  }
+  if (o.ceiling != null) {
+    const yC = yc - (o.ceiling - value) * pxPer;
+    if (yC > top) {
+      glow(g, C.red, 6);
+      g.lineWidth = 2;
+      line(g, x - fs * 0.6, yC, x + dir * fs * 4, yC);
+      g.globalAlpha = 0.18;
+      g.fillRect(Math.min(x, x + dir * fs * 4), top, fs * 4, yC - top);
+      g.globalAlpha = 1;
+      glow(g, C.hud, 5);
+    }
+  }
+  if (o.bug != null && isFinite(o.bug)) {
+    const yB = yc - (o.bug - value) * pxPer;
+    glow(g, C.cyan, 5);
+    g.beginPath(); g.moveTo(x - dir * 2, yB); g.lineTo(x - dir * fs * 0.8, yB - fs * 0.45); g.lineTo(x - dir * fs * 0.8, yB + fs * 0.45); g.closePath(); g.stroke();
+    glow(g, C.hud, 5);
+  }
+  if (o.trend) {
+    const yT = yc - o.trend * pxPer;
+    g.lineWidth = 2;
+    line(g, x - dir * 4, yc, x - dir * 4, clamp(yT, top, bot));
+  }
+  g.restore();
+
+  // readout box pointing at the tape
+  const bw = fs * 5.2, bh = big * 1.35;
+  const bx = side === 'left' ? x - fs * 1.1 - bw : x + fs * 1.1;
+  g.save();
+  g.fillStyle = 'rgba(1,6,4,0.92)'; g.shadowBlur = 0;
+  g.fillRect(bx, yc - bh / 2, bw, bh);
+  glow(g, C.hud, 6);
+  g.lineWidth = 1.6;
+  g.beginPath();
+  if (side === 'left') {
+    g.moveTo(bx, yc - bh / 2); g.lineTo(bx + bw, yc - bh / 2); g.lineTo(x - 2, yc); g.lineTo(bx + bw, yc + bh / 2); g.lineTo(bx, yc + bh / 2);
+  } else {
+    g.moveTo(bx + bw, yc - bh / 2); g.lineTo(bx, yc - bh / 2); g.lineTo(x + 2, yc); g.lineTo(bx, yc + bh / 2); g.lineTo(bx + bw, yc + bh / 2);
+  }
+  g.closePath(); g.stroke();
+  g.font = `bold ${big}px ${MONO}`;
+  text(g, o.fmt(value), bx + bw / 2 + (side === 'left' ? -fs * 0.3 : fs * 0.3), yc, 'center');
+  // captions sit over the readout box, anchored at its outer edge so they never leave the HUD
+  const align = side === 'left' ? 'left' : 'right';
+  const ax = side === 'left' ? bx : bx + bw;
+  g.font = `bold ${fs}px ${MONO}`;
+  text(g, o.title, ax, top - fs * 2.2, align);
+  g.font = `${fs * 0.85}px ${MONO}`; g.fillStyle = C.muted; g.shadowBlur = 0;
+  text(g, `${o.sub} · ${o.foot}`, ax, top - fs * 0.9, align);
+  g.restore();
+}
+
+function hTape(g, cx, y, W, value, nCtx, fs, big, live) {
+  const pxPer = W / (nCtx * 0.6);
+  const minor = nCtx / 32, major = nCtx / 8;
+  g.save();
+  g.lineWidth = 1.3;
+  if (!live) g.globalAlpha = 0.45;
+  line(g, cx - W / 2, y + fs * 2.2, cx + W / 2, y + fs * 2.2);
+  g.beginPath(); g.rect(cx - W / 2, y - fs, W, fs * 4); g.clip();
+  const base = y + fs * 2.2;
+  const span = W / 2 / pxPer;
+  for (let v = Math.floor((value - span) / minor) * minor; v <= value + span; v += minor) {
+    const x = cx + (v - value) * pxPer;
+    const out = v < 0 || v > nCtx;
+    const isMajor = Math.abs(v / major - Math.round(v / major)) < 1e-6;
+    if (out) glow(g, C.red, 4);
+    line(g, x, base, x, base - (isMajor ? fs * 0.9 : fs * 0.45));
+    if (isMajor && !out) text(g, v >= 1024 ? (v / 1024) + 'K' : String(v), x, base - fs * 1.6, 'center');
+    if (out) glow(g, C.hud, 5);
+  }
+  g.restore();
+  g.save();
+  if (!live) g.globalAlpha = 0.45;
+  const bw = fs * 6.5, bh = big * 1.2, by = base + fs * 0.4;
+  g.fillStyle = 'rgba(1,6,4,0.92)'; g.shadowBlur = 0;
+  g.fillRect(cx - bw / 2, by, bw, bh);
+  const frac = value / nCtx;
+  glow(g, frac >= 0.98 ? C.red : frac >= 0.85 ? C.amber : C.hud, 6);
+  g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(cx, base + 1); g.lineTo(cx - fs * 0.5, by); g.lineTo(cx - bw / 2, by); g.lineTo(cx - bw / 2, by + bh);
+  g.lineTo(cx + bw / 2, by + bh); g.lineTo(cx + bw / 2, by); g.lineTo(cx + fs * 0.5, by); g.closePath(); g.stroke();
+  g.font = `bold ${big * 0.9}px ${MONO}`;
+  text(g, Math.round(value).toString(), cx, by + bh / 2, 'center');
+  g.font = `${fs * 0.85}px ${MONO}`; g.fillStyle = C.muted; g.shadowBlur = 0;
+  text(g, '上下文', cx - bw / 2 - fs * 0.8, by + bh / 2, 'right');
+  text(g, `/ ${fNum(nCtx)} · 剩 ${fNum(Math.max(0, nCtx - Math.round(value)))}`, cx + bw / 2 + fs * 0.8, by + bh / 2, 'left');
+  g.restore();
+  glow(g, C.hud, 5);
+}
+
+// ---------------------------------------------------------------- MFD dials
+function dial(g, x, y, r, v, o) {
+  const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
+  const ang = (val) => a0 + (a1 - a0) * clamp((val - o.min) / (o.max - o.min), 0, 1);
+  g.save();
+  g.lineWidth = 2;
+  g.shadowBlur = 0;
+  g.strokeStyle = 'rgba(93,255,168,0.12)';
+  g.beginPath(); g.arc(x, y, r, a0, a1); g.stroke();
+  if (o.amber != null) { g.strokeStyle = C.amber; g.beginPath(); g.arc(x, y, r, ang(o.amber), ang(o.red ?? o.max)); g.stroke(); }
+  if (o.red != null) { g.strokeStyle = C.red; g.beginPath(); g.arc(x, y, r, ang(o.red), a1); g.stroke(); }
+  const valid = v != null && isFinite(v);
+  const base = o.color ?? C.hud;
+  const col = !valid ? C.faint : o.red != null && v >= o.red ? C.red : o.amber != null && v >= o.amber ? C.amber : base;
+  glow(g, col, 6);
+  g.lineWidth = 4;
+  if (valid) { g.globalAlpha = 0.35; g.beginPath(); g.arc(x, y, r - 5, a0, ang(v)); g.stroke(); g.globalAlpha = 1; }
+  g.lineWidth = 1.2;
+  glow(g, C.dim, 0);
+  for (let i = 0; i <= 10; i++) {
+    const a = a0 + (a1 - a0) * i / 10, len = i % 5 === 0 ? r * 0.16 : r * 0.08;
+    line(g, x + Math.cos(a) * r, y + Math.sin(a) * r, x + Math.cos(a) * (r - len), y + Math.sin(a) * (r - len));
+  }
+  if (valid) {
+    glow(g, col, 6);
+    g.lineWidth = 2.2;
+    const a = ang(v);
+    line(g, x + Math.cos(a) * r * 0.12, y + Math.sin(a) * r * 0.12, x + Math.cos(a) * r * 0.86, y + Math.sin(a) * r * 0.86);
+  }
+  g.beginPath(); g.arc(x, y, 2.5, 0, Math.PI * 2); g.fill();
+  const fs = clamp(r * 0.3, 9, 15);
+  g.font = `bold ${fs * 1.25}px ${MONO}`;
+  text(g, valid ? o.fmt(v) : '—', x, y + r * 0.48, 'center');
+  g.font = `${fs * 0.8}px ${MONO}`; g.fillStyle = C.muted; g.shadowBlur = 0;
+  text(g, o.unit, x, y + r * 0.82, 'center');
+  g.fillStyle = C.text;
+  g.font = `${clamp(r * 0.27, 10, 13)}px ${MONO}`;
+  text(g, o.label, x, y + r + fs * 0.6, 'center');
+  g.restore();
+}
+
+function drawDials(id, specs) {
+  const { g, w, h } = surface(id);
+  if (w < 10) return;
+  const n = specs.length, cw = w / n;
+  const r = Math.min(cw * 0.38, (h - 30) * 0.5);
+  specs.forEach((s, i) => dial(g, cw * (i + 0.5), r + 6, r, s.v, s));
+}
+
+function drawCores() {
+  const { g, w, h } = surface('cores');
+  const cores = D?.win?.cpu?.cores ?? [];
+  g.font = `11px ${MONO}`; g.fillStyle = C.muted;
+  text(g, `逻辑核心 ×${cores.length || '—'}${D?.win?.cpu?.mhz ? ` · ${fNum(D.win.cpu.mhz)} MHz` : ''}`, 0, 6, 'left');
+  if (!cores.length) return;
+  const top = 14, bh = h - top - 1, gap = 2;
+  const bw = (w - gap * (cores.length - 1)) / cores.length;
+  cores.forEach((v, i) => {
+    const x = i * (bw + gap);
+    g.fillStyle = 'rgba(93,255,168,0.07)';
+    g.fillRect(x, top, bw, bh);
+    g.fillStyle = v >= 90 ? C.red : v >= 70 ? C.amber : C.hud;
+    g.shadowColor = g.fillStyle; g.shadowBlur = 4;
+    const hh = bh * clamp(v / 100, 0, 1);
+    g.fillRect(x, top + bh - hh, bw, hh);
+    g.shadowBlur = 0;
+  });
+}
+
+// ---------------------------------------------------------------- radar (strip charts)
+document.querySelectorAll('#radar-osb button').forEach((b) => b.onclick = () => {
+  radarWindow = +b.dataset.w;
+  document.querySelectorAll('#radar-osb button').forEach((x) => x.classList.toggle('on', x === b));
+});
+
+function drawRadar() {
+  const { g, w, h } = surface('radar');
+  if (w < 10 || h < 40) return;
+  const now = Date.now(), W = radarWindow * 1000;
+  const pts = hist.filter((p) => p.t >= now - W - 2000);
+  const memTotal = D?.gpu?.memTotal ?? 8192;
+  const maxTps = Math.max(10, ...pts.map((p) => p.tps ?? 0)) * 1.15;
+  const maxPwr = Math.max(100, ...pts.map((p) => p.totPwr ?? 0)) * 1.1;
+  const maxHard = Math.max(2000, ...pts.map((p) => p.hard ?? 0)) * 1.1;
+  const lanes = [
+    { title: '解码 tok/s', series: [{ k: 'tps', c: C.hud, max: maxTps, fmt: (v) => v.toFixed(1) }] },
+    { title: '负载 %', series: [{ k: 'gpu', c: C.cyan, max: 100, name: 'GPU', fmt: (v) => v.toFixed(0) + '%' }, { k: 'memUtil', c: C.hud, max: 100, name: '显存控制', fmt: (v) => v.toFixed(0) + '%' }, { k: 'cpu', c: C.amber, max: 100, name: 'CPU', fmt: (v) => v.toFixed(0) + '%' }] },
+    { title: '存储', series: [{ k: 'vram', c: C.hud, max: memTotal, name: '显存', fmt: (v) => (v / 1024).toFixed(2) + 'G' }, { k: 'ram', c: C.amber, max: 100, name: '内存', fmt: (v) => v.toFixed(0) + '%' }] },
+    { title: '功耗 W', series: [{ k: 'totPwr', c: C.magenta, max: maxPwr, name: '总', fmt: (v) => v.toFixed(0) }, { k: 'pwr', c: C.cyan, max: maxPwr, name: 'GPU', fmt: (v) => v.toFixed(0) }, { k: 'cpuPwr', c: C.amber, max: maxPwr, name: 'CPU', fmt: (v) => v.toFixed(0) }] },
+    { title: '硬缺页 · 温度', series: [{ k: 'hard', c: C.red, max: maxHard, name: '硬缺页', fmt: (v) => fNum(Math.round(v)) + '/秒' }, { k: 'temp', c: C.amber, max: 100, name: '温度', fmt: (v) => v.toFixed(0) + '°' }] },
+  ];
+  const axisH = 14, laneGap = 5;
+  const laneH = (h - axisH - laneGap * (lanes.length - 1)) / lanes.length;
+  const xOf = (t) => w - (now - t) / W * w;
+  g.font = `11px ${MONO}`;
+  lanes.forEach((lane, li) => {
+    const y0 = li * (laneH + laneGap);
+    g.shadowBlur = 0;
+    g.strokeStyle = 'rgba(93,255,168,0.1)'; g.lineWidth = 1;
+    g.strokeRect(0.5, y0 + 0.5, w - 1, laneH - 1);
+    g.setLineDash([2, 4]);
+    for (let q = 1; q < 4; q++) line(g, 0, y0 + laneH * q / 4, w, y0 + laneH * q / 4);
+    for (let s = 60; s < radarWindow; s += radarWindow <= 60 ? 15 : 60) line(g, xOf(now - s * 1000), y0, xOf(now - s * 1000), y0 + laneH);
+    g.setLineDash([]);
+    g.fillStyle = C.muted;
+    text(g, lane.title, 6, y0 + 9, 'left');
+    let rx = w - 6;
+    for (const s of [...lane.series].reverse()) {
+      const last = pts.length ? pts[pts.length - 1][s.k] : null;
+      const label = `${s.name ? s.name + ' ' : ''}${last != null ? s.fmt(last) : '—'}`;
+      glow(g, s.c, 4);
+      text(g, label, rx, y0 + 9, 'right');
+      rx -= g.measureText(label).width + 10;
+    }
+    for (const s of lane.series) {
+      glow(g, s.c, 4);
+      g.lineWidth = 1.5;
+      g.beginPath();
+      let started = false;
+      for (const p of pts) {
+        const v = p[s.k];
+        if (v == null) { started = false; continue; }
+        const x = xOf(p.t), y = y0 + laneH - 2 - clamp(v / s.max, 0, 1) * (laneH - 18);
+        if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  });
+  g.shadowBlur = 0; g.fillStyle = C.muted;
+  const yA = h - 3;
+  const lbl = (s) => s >= 60 ? `-${s / 60}分` : `-${s}秒`;
+  text(g, lbl(radarWindow), 2, yA, 'left', 'bottom');
+  text(g, lbl(radarWindow / 2), w / 2, yA, 'center', 'bottom');
+  text(g, '现在', w - 2, yA, 'right', 'bottom');
+}
+
+// ---------------------------------------------------------------- render loop
+// Capped at ~30 fps (charts at ~4 fps) so the cockpit itself barely loads the GPU it is measuring.
+let lastFrame = performance.now(), lastSlow = 0;
+function frame(now) {
+  if (now - lastFrame < 31) { requestAnimationFrame(frame); return; }
+  const dt = Math.min(0.25, (now - lastFrame) / 1000);
+  lastFrame = now;
+  const a = 1 - Math.exp(-dt / 0.28);
+  for (const key in T) S[key] += (T[key] - S[key]) * a;
+  try {
+    drawHud(now);
+    const g = D?.gpu;
+    drawDials('gpu-dials', [
+      { label: '计算利用率', unit: '%', v: g ? S.gpu : null, min: 0, max: 100, fmt: (v) => v.toFixed(0), color: C.cyan },
+      { label: '显存控制器', unit: '%', v: g ? S.memUtil : null, min: 0, max: 100, fmt: (v) => v.toFixed(0) },
+      { label: '温度', unit: '°C', v: g ? S.temp : null, min: 20, max: 100, amber: 80, red: 87, fmt: (v) => v.toFixed(0) },
+      { label: 'GPU 功耗', unit: `W / ${g?.powerLimit ?? '—'}`, v: g ? S.pwr : null, min: 0, max: g?.powerLimit ?? 300, amber: (g?.powerLimit ?? 300) * 0.9, fmt: (v) => v.toFixed(0), color: C.magenta },
+    ]);
+    const L = D?.logical ?? 16;
+    const cpuMax = Math.max(150, Math.ceil(cpuPwrPeak * 1.25 / 50) * 50);
+    drawDials('sys-dials', [
+      { label: 'CPU 占用', unit: '%', v: D?.win ? S.cpu : null, min: 0, max: 100, amber: 85, red: 97, fmt: (v) => v.toFixed(0), color: C.amber },
+      { label: 'CPU 功耗', unit: `W / ${cpuMax}`, v: D?.cpuPwr != null ? S.cpuPwr : null, min: 0, max: cpuMax, fmt: (v) => v.toFixed(0), color: C.magenta },
+      { label: '内存', unit: '%', v: D?.win ? S.ram : null, min: 0, max: 100, amber: 90, red: 97, fmt: (v) => v.toFixed(0) },
+      { label: '推理核心', unit: `核 / ${L}`, v: D?.rproc ? S.rcores : null, min: 0, max: L, fmt: (v) => v.toFixed(1) },
+    ]);
+    drawCores();
+    if (now - lastSlow > 250) { lastSlow = now; drawRadar(); drawLayers(); }
+  } catch (e) { console.error(e); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---------------------------------------------------------------- test flight
+const PRESETS = {
+  sprint: { prompt: '用一句话解释什么是量子纠缠。', max: 128 },
+  cruise: { prompt: '请分步骤解释喷气式发动机的工作原理，大约 300 字。', max: 512 },
+  code: { prompt: '写一个 Python 函数，判断字符串是否为回文（忽略大小写和标点），附带文档字符串和三个 pytest 测试。', max: 400 },
+  prefill: {
+    prompt: Array.from({ length: 14 }, (_, i) => `Section ${i + 1}. The development of the jet engine transformed aviation in the twentieth century. ` +
+      'Early turbojets, built independently by Frank Whittle in Britain and Hans von Ohain in Germany, compressed incoming air, mixed it with fuel, ' +
+      'and expanded the hot exhaust through a turbine that drove the compressor. Later turbofans added a large fan that moves extra air around the core, ' +
+      'raising efficiency and lowering noise. Modern fighters pair afterburning turbofans with digital engine control, while airliners rely on high-bypass designs.')
+      .join('\n\n') + '\n\n请用一句中文概括以上所有段落。',
+    max: 64,
+  },
+};
+document.querySelectorAll('[data-preset]').forEach((b) => b.onclick = () => {
+  const p = PRESETS[b.dataset.preset];
+  $('#tf-prompt').value = p.prompt;
+  $('#tf-max').value = p.max;
+});
+$('#tf-prompt').value = PRESETS.sprint.prompt;
+$('#tf-max').value = PRESETS.sprint.max;
+
+async function loadModelList() {
+  try {
+    const t = await fetch('/ollama/api/tags').then((r) => r.json());
+    const names = (t.models ?? []).map((m) => m.name).sort();
+    const sel = $('#tf-model');
+    const keep = sel.value || D?.model?.name || names.find((n) => n.startsWith('gemma4')) || names[0];
+    sel.innerHTML = names.map((n) => `<option ${n === keep ? 'selected' : ''}>${esc(n)}</option>`).join('');
+  } catch { setTimeout(loadModelList, 3000); }
+}
+
+const out = $('#tf-out');
+function outAppend(textStr, cls) {
+  const atBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 8;
+  let last = out.lastChild;
+  if (!last || last.className !== (cls ?? '')) { last = document.createElement('span'); last.className = cls ?? ''; out.appendChild(last); }
+  last.textContent += textStr;
+  if (atBottom) out.scrollTop = out.scrollHeight;
+}
+function setStatus(s) { $('#tf-status').textContent = s; }
+function setStats(r) {
+  $('#st-ttft').textContent = fSec(r.ttft);
+  $('#st-pp').textContent = fTps(r.ppRate);
+  $('#st-tg').textContent = fTps(r.tgRate);
+  $('#st-load').textContent = r.load != null ? fSec(r.load) : '—';
+  $('#st-tok').textContent = r.promptTokens != null ? `${r.promptTokens} / ${r.decoded}` : '—';
+  $('#st-total').textContent = fSec(r.total);
+  $('#st-energy').textContent = fJ(r.energyJ);
+  $('#st-eff').textContent = r.energyJ && r.decoded ? fEff(r.decoded / r.energyJ) : '—';
+}
+
+async function waitUnloaded(model, timeoutMs = 20000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    const ps = await fetch('/ollama/api/ps').then((r) => r.json()).catch(() => ({ models: [] }));
+    if (!(ps.models ?? []).some((m) => m.name === model)) return true;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return false;
+}
+
+$('#tf-go').onclick = async () => {
+  if (flight.active) return;
+  const model = $('#tf-model').value;
+  const prompt = $('#tf-prompt').value.trim();
+  if (!model || !prompt) { setStatus('需要选模型并填写提示词'); return; }
+  const think = $('#tf-think').value;
+  const ctx = $('#tf-ctx').value;
+  const cold = $('#tf-cold').checked;
+  const max = Math.max(1, +$('#tf-max').value || 256);
+  const body = { model, prompt, stream: true, options: { num_predict: max } };
+  if (think !== 'auto') body.think = think === 'on';
+  if (ctx) body.options.num_ctx = +ctx;
+
+  Object.assign(flight, { active: true, t0: 0, t0Wall: Date.now(), tFirst: null, tokens: 0, liveRate: 0, ctrl: new AbortController(), e0: null });
+  $('#tf-go').disabled = true; $('#tf-abort').disabled = false;
+  out.textContent = '';
+  setStats({});
+  let final = null;
+  try {
+    if (cold) {
+      setStatus('冷启动 · 正在卸载模型…');
+      await fetch('/ollama/api/generate', { method: 'POST', body: JSON.stringify({ model, keep_alive: 0 }), signal: flight.ctrl.signal });
+      await waitUnloaded(model);
+    }
+    flight.t0Wall = Date.now();
+    flight.t0 = performance.now();
+    flight.e0 = energyAt(snap);
+    setStatus('加载 · 等待第一个 token…');
+    const res = await fetch('/ollama/api/generate', { method: 'POST', body: JSON.stringify(body), signal: flight.ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text()}`);
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const lineStr = buf.slice(0, i); buf = buf.slice(i + 1);
+        if (!lineStr.trim()) continue;
+        const c = JSON.parse(lineStr);
+        if (c.error) throw new Error(c.error);
+        const piece = (c.thinking ?? '') + (c.response ?? '');
+        if (piece) {
+          const t = performance.now();
+          if (flight.tFirst === null) flight.tFirst = t;
+          flight.tokens++;
+          const span = (t - flight.tFirst) / 1000;
+          flight.liveRate = span > 0.3 ? (flight.tokens - 1) / span : 0;
+          if (c.thinking) outAppend(c.thinking, 'think');
+          if (c.response) outAppend(c.response);
+          setStatus(`飞行中 · ${flight.tokens} token · ${fTps(flight.liveRate)} tok/s · ${fSec((t - flight.t0) / 1000)}`);
+          $('#st-ttft').textContent = fSec((flight.tFirst - flight.t0) / 1000);
+          $('#st-tg').textContent = fTps(flight.liveRate);
+        }
+        if (c.done) final = c;
+      }
+    }
+    if (!final) throw new Error('数据流结束但没有收到统计信息');
+    const ns = 1e9;
+    const e1 = energyAt(snap);
+    const cpuJ = flight.e0?.cpuJ != null && e1?.cpuJ != null ? e1.cpuJ - flight.e0.cpuJ : null;
+    const gpuJ = flight.e0 && e1 ? e1.gpuJ - flight.e0.gpuJ : null;
+    const rec = {
+      start: flight.t0Wall, end: Date.now(), model, cold, think, ctx: ctx ? +ctx : null,
+      promptTokens: final.prompt_eval_count ?? 0, decoded: final.eval_count ?? 0,
+      ttft: flight.tFirst !== null ? (flight.tFirst - flight.t0) / 1000 : null,
+      ppRate: final.prompt_eval_duration ? final.prompt_eval_count / (final.prompt_eval_duration / ns) : null,
+      tgRate: final.eval_duration ? final.eval_count / (final.eval_duration / ns) : null,
+      tpotMs: final.eval_count ? final.eval_duration / 1e6 / final.eval_count : null,
+      load: final.load_duration != null ? final.load_duration / ns : null,
+      total: final.total_duration != null ? final.total_duration / ns : null,
+      cpuJ, gpuJ, energyJ: gpuJ != null ? gpuJ + (cpuJ ?? 0) : null,
+      doneReason: final.done_reason ?? null,
+    };
+    flights.unshift(rec);
+    saveFlights();
+    setStats(rec);
+    setStatus(`着陆 · 解码 ${fTps(rec.tgRate)} tok/s · 预填 ${fTps(rec.ppRate)} tok/s${final.done_reason === 'length' ? ' · 达到字数上限' : ''}`);
+  } catch (e) {
+    if (e.name === 'AbortError') setStatus('已中止');
+    else { setStatus('故障'); outAppend('\n' + e.message, 'err'); }
+  } finally {
+    flight.active = false;
+    flight.liveRate = 0;
+    $('#tf-go').disabled = false; $('#tf-abort').disabled = true;
+    logKey = null;
+    updateLog();
+  }
+};
+$('#tf-abort').onclick = () => flight.ctrl?.abort();
+
+// ---------------------------------------------------------------- GitHub star button
+fetch('https://api.github.com/repos/FelixJiashengFu/ollama-hud')
+  .then((r) => r.json())
+  .then((j) => { if (typeof j.stargazers_count === 'number') $('#gh-stars').textContent = fNum(j.stargazers_count); })
+  .catch(() => {});
+
+// ---------------------------------------------------------------- phone access (LAN + QR)
+
+function loadQrLib() {
+  if (window.QRCode) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+$('#phone-btn').onclick = async () => {
+  const body = $('#phone-body');
+  $('#phone-modal').hidden = false;
+  body.innerHTML = '<p class="m">读取中…</p>';
+  const j = await fetch('/api/lan').then((r) => r.json()).catch(() => null);
+  if (!j?.lan) {
+    body.innerHTML = '<p>现在只允许本机访问。</p><p class="m">关掉黑色窗口，重新双击 <b>Start-Cockpit.cmd</b> 启动，就会同时开启手机访问。</p>';
+    return;
+  }
+  if (!j.urls.length) {
+    body.innerHTML = '<p>没找到这台电脑的 Wi-Fi / 有线网络地址。</p><p class="m">确认电脑已经连上 Wi-Fi 后再试。</p>';
+    return;
+  }
+  const link = j.urls[0];
+  body.innerHTML = `
+    <div id="qr"></div>
+    <p>手机连上和电脑<b>同一个 Wi-Fi</b>，用相机或手机浏览器扫码。</p>
+    <p class="url">${esc(link.replace(/\?key=.*/, ''))}</p>
+    <p class="m">二维码里带有访问码，只给自己的手机扫。扫过一次手机会记住，之后直接打开上面的地址即可。</p>
+    <p class="m">打不开的话：看电脑上有没有 Windows 防火墙弹窗，勾选「专用网络」并点「允许访问」。</p>
+    ${j.urls.length > 1 ? `<p class="m">其他网卡地址：${j.urls.slice(1).map((u) => esc(u.replace(/\?key=.*/, ''))).join('、')}</p>` : ''}`;
+  try {
+    await loadQrLib();
+    new QRCode($('#qr'), { text: link, width: 220, height: 220, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  } catch {
+    $('#qr').outerHTML = `<p class="m">二维码组件加载失败（可能没联网）。请在手机浏览器手动输入：</p><p class="url">${esc(link)}</p>`;
+  }
+};
+$('#phone-close').onclick = () => { $('#phone-modal').hidden = true; };
+$('#phone-modal').onclick = (e) => { if (e.target === $('#phone-modal')) $('#phone-modal').hidden = true; };
+
+boot();
+</script>
+</body>
+</html>

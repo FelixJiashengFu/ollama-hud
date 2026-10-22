@@ -1,0 +1,3 @@
+# access key for phone/LAN access - never publish
+.cockpit-key
+*.log
